@@ -1,62 +1,80 @@
-# Dashboard Frontend
+# Frontend Dashboard
 
-`/dashboard` 现在是一个完整的运维式前端，不再是单块内联页面。
+当前前端已经改为前后端完全分离的标准 Vue 工程。
 
-## 页面结构
+## 目录结构
 
-- `Session Workspace`
-  - 创建 session
-  - 维护 domain / goal / background / 每周时间预算 / preferences
-  - 浏览已有 session 列表并切换上下文
-- `Run Sync Turn`
-  - 直接调用 `POST /api/sessions/{session_id}/turns`
-  - 用于快速验证教学回路
-- `Async Task Console`
-  - 调用 `POST /api/tasks/turns`
-  - 优先通过 `WS /ws/tasks/{task_id}` 订阅任务状态
-  - 如果 WebSocket 不可用，可回退到 `GET /api/tasks/{task_id}` 轮询
-- `Dead Letter Queue`
-  - 调用 `GET /api/tasks/dead-letter`
-  - 支持在页面内直接执行 `POST /api/tasks/{task_id}/requeue`
-- `Knowledge Pipeline`
-  - 支持文本上传
-  - 支持 `POST /api/sessions/{session_id}/knowledge/import-url` 导入 URL
-  - 支持 `GET /api/sessions/{session_id}/knowledge/search`
-- `Runtime Pulse`
-  - 汇总 `GET /api/runtime/summary`
-  - 尝试拉取 `GET /api/audit` 与 `GET /api/logs/app`
-  - 展示 provider routing 与默认模型配置
-- `Session Activity / Progress Snapshot / Export`
-  - 展示 summary、timeline、due reviews、checkpoints、export preview
+- 后端 API: `app/main.py`
+- 后端说明页: `app/dashboard.py`
+- 前端工程根目录: `frontend/`
+- Vite 入口: `frontend/index.html`
+- Vue 挂载入口: `frontend/src/main.js`
+- 主应用: `frontend/src/App.vue`
+- 组件目录: `frontend/src/components/`
+- API 访问层: `frontend/src/lib/api.js`
 
-## 静态资源
+## 开发运行
 
-- HTML shell: `app/dashboard.py`
-- CSS: `app/static/dashboard.css`
-- JS: `app/static/dashboard.js`
+先启动后端：
 
-FastAPI 在 `/static` 挂载静态目录：
+```powershell
+.\scripts\dev.ps1
+```
 
-- `/static/dashboard.css`
-- `/static/dashboard.js`
+再启动前端：
 
-## 鉴权说明
+```powershell
+.\scripts\dev-frontend.ps1
+```
 
-页面顶部的 `X-Admin-Key` 输入框会写入 `localStorage`，随后自动附带到所有 HTTP API 请求。
+或者直接双开：
 
-浏览器原生 WebSocket 不能像 `fetch` 一样自定义请求头，所以 dashboard 在连接 `WS /ws/tasks/{task_id}` 时会在 query string 里附带 `api_key`。后端当前同时支持：
+```powershell
+.\scripts\dev-fullstack.ps1
+```
 
-- Header: `X-Admin-Key`
-- Query: `?api_key=...`
+默认地址：
 
-这只是为了浏览器端任务流可用，不影响现有 header 鉴权客户端。
+- 前端: `http://127.0.0.1:5173`
+- 后端 API: `http://127.0.0.1:8000`
+- 后端说明页: `http://127.0.0.1:8000/dashboard`
+
+## 代理规则
+
+`frontend/vite.config.js` 已代理这些路径到后端：
+
+- `/api`
+- `/health`
+- `/metrics`
+- `/ws`
+
+因此前端本地开发时不需要额外配置 CORS。
+
+## 页面能力
+
+当前 Vue 前端保留了原 dashboard 的核心能力：
+
+- session 创建与切换
+- 同步 turn 提交
+- 异步 task 入队、轮询、WebSocket 状态流
+- dead-letter 列表与 requeue
+- URL 导入知识、文本上传、knowledge search
+- runtime summary 与 config summary
+- checkpoints 与 export preview
+
+## 构建命令
+
+在 `frontend/` 目录下可直接使用：
+
+```powershell
+npm install
+npm run dev
+npm run build
+```
 
 ## 回归测试
 
-前端相关最关键的测试是：
-
 - `tests/test_dashboard.py`
-- `tests/test_websocket_ops.py`
+- `tests/test_dev_scripts.py`
 - `tests/test_task_queue_ops.py`
-- `tests/test_security_ops.py`
-- `tests/test_observability_ops.py`
+- `tests/test_websocket_ops.py`

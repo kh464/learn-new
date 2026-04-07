@@ -4,6 +4,8 @@ from pathlib import Path
 def test_dev_scripts_enable_utf8_console_and_python() -> None:
     dev_script = Path("scripts/dev.ps1").read_text(encoding="utf-8")
     test_script = Path("scripts/test.ps1").read_text(encoding="utf-8")
+    frontend_script = Path("scripts/dev-frontend.ps1").read_text(encoding="utf-8")
+    fullstack_script = Path("scripts/dev-fullstack.ps1").read_text(encoding="utf-8")
 
     assert "chcp 65001" in dev_script
     assert "$env:PYTHONUTF8='1'" in dev_script
@@ -12,6 +14,14 @@ def test_dev_scripts_enable_utf8_console_and_python() -> None:
     assert "chcp 65001" in test_script
     assert "$env:PYTHONUTF8='1'" in test_script
     assert "pytest tests -q" in test_script
+
+    assert "npm install" in frontend_script
+    assert "npm run dev" in frontend_script
+    assert "frontend" in frontend_script
+
+    assert "Start-Process" in fullstack_script
+    assert "scripts/dev.ps1" in fullstack_script
+    assert "scripts/dev-frontend.ps1" in fullstack_script
 
 
 def test_backup_and_restore_scripts_include_operational_safety_guards() -> None:

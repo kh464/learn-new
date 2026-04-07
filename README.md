@@ -2,9 +2,10 @@
 
 领域精通型自适应教学多 Agent 系统 MVP。
 
-当前实现聚焦后端主链路：
+当前实现采用前后端完全分离架构：
 
 - FastAPI 服务
+- Vue 3 + Vite 独立前端工程
 - LangGraph 编排学习流程
 - 本地 `.learn/` 文件系统持久化
 - 可选 SQLite / PostgreSQL 会话状态与 checkpoint 元数据存储
@@ -52,10 +53,22 @@ python -m pip install -e .[dev]
 $env:SILICONFLOW_API_KEY="你的真实key"
 ```
 
-启动服务：
+启动后端 API：
 
 ```powershell
 .\scripts\dev.ps1
+```
+
+安装并启动前端：
+
+```powershell
+.\scripts\dev-frontend.ps1
+```
+
+或一键同时启动前后端：
+
+```powershell
+.\scripts\dev-fullstack.ps1
 ```
 
 如果使用 PostgreSQL 持久化，先执行数据库迁移：
@@ -117,13 +130,21 @@ docker compose -f docker-compose.yml -f docker-compose.infra.yml -f docker-compo
 如果你直接在 Windows 终端里运行 Python 命令看到中文显示异常，优先使用 `scripts/dev.ps1` 和 `scripts/test.ps1`。
 这两个脚本会先把控制台和 Python I/O 切到 UTF-8，再启动服务或测试。
 
-浏览器可直接打开：
+启动后访问：
 
 ```text
-http://127.0.0.1:8000/dashboard
+frontend: http://127.0.0.1:5173
+backend:  http://127.0.0.1:8000
+notice:   http://127.0.0.1:8000/dashboard
 ```
 
-仪表盘当前可直接完成这些操作：
+其中：
+
+- `http://127.0.0.1:5173` 是实际可交互的 Vue 前端
+- `http://127.0.0.1:8000` 是 FastAPI 后端 API
+- `http://127.0.0.1:8000/dashboard` 现在仅提供前端启动说明，不再承载实际 UI
+
+前端当前可直接完成这些操作：
 
 - 创建学习 session
 - 填写 background、每周时间预算和学习偏好创建更完整的 learner profile
@@ -142,7 +163,7 @@ http://127.0.0.1:8000/dashboard
 - 查看 `/api/runtime/summary`、`/api/audit`、`/api/logs/app` 聚合后的运行态摘要
 - 查看 `/api/config` 暴露的 provider routing 与默认模型配置
 
-更多前端面板和操作说明见：
+分离式前端的结构、代理和开发说明见：
 
 - [docs/frontend-dashboard.md](docs/frontend-dashboard.md)
 
@@ -373,7 +394,7 @@ docker build -t learn-new:local .
 - 已实现 checkpoint 列表与恢复接口，可从 `.learn/checkpoints` 显式回滚 session 状态
 - 已实现 session export 接口，可导出 summary、timeline、checkpoint 和核心工件
 - 已实现 session index 接口，前端仪表盘可以直接列出全部学习会话
-- 已实现轻量 dashboard 页面，可直接消费现有 API 展示 session list、summary、timeline、lesson、practice、latest feedback、due review queue、knowledge search、export preview，并支持创建 session、上传知识、检索知识、提交回答、启动 review、恢复 checkpoint、预览导出、导出 session
+- 已实现前后端完全分离的 Vue 3 + Vite dashboard 工程，可直接消费现有 API 展示 session list、summary、timeline、lesson、practice、latest feedback、due review queue、knowledge search、export preview，并支持创建 session、上传知识、检索知识、提交回答、启动 review、恢复 checkpoint、预览导出、导出 session
 - 已补充 `Dockerfile`、`.dockerignore`、`docker-compose.yml` 作为单节点部署底座
 - 已补充 `config/llm.production.yaml` 和 `docker-compose.infra.yml`，可直接拉起 PostgreSQL、Redis、Qdrant 的基础生产模板
 - 容器模板已补充 healthcheck、只读根文件系统、`no-new-privileges`、`cap_drop=ALL`、`tmpfs` 与 `pids_limit`
@@ -399,4 +420,4 @@ docker build -t learn-new:local .
 1. 接入真实 LLM provider
 2. 接入向量检索与外部知识采集
 3. 接入沙箱执行器
-4. 补 WebSocket 流式和前端界面
+4. 继续增强 WebSocket 流式体验和前端交互细节

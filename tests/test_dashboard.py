@@ -20,31 +20,18 @@ def _write_dashboard_config(path: Path) -> None:
                 "      api_key:",
                 "      models:",
                 "        chat: Qwen/Qwen2.5-7B-Instruct",
-                "    openai:",
-                "      enabled: true",
-                "      base_url: https://api.openai.com/v1",
-                "      api_key:",
-                "      models:",
-                "        reasoning: gpt-5.1",
                 "  routing:",
                 "    profiles:",
                 "      chat:",
                 "        provider: siliconflow",
                 "        model: Qwen/Qwen2.5-7B-Instruct",
-                "      research:",
-                "        provider: openai",
-                "        model: gpt-5.1",
-                "tasks:",
-                "  enabled: true",
-                "  worker_threads: 1",
-                "  max_queue_size: 8",
             ]
         ),
         encoding="utf-8",
     )
 
 
-def test_dashboard_page_serves_modern_app_shell_and_frontend_entrypoints(tmp_path: Path) -> None:
+def test_dashboard_route_serves_frontend_split_notice(tmp_path: Path) -> None:
     config_path = tmp_path / "llm.yaml"
     _write_dashboard_config(config_path)
     app = create_app(workspace_root=tmp_path / ".learn", config_path=config_path)
@@ -54,83 +41,43 @@ def test_dashboard_page_serves_modern_app_shell_and_frontend_entrypoints(tmp_pat
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert 'id="app-shell"' in response.text
-    assert 'data-dashboard-version="2"' in response.text
-    assert 'href="/static/dashboard.css"' in response.text
-    assert 'src="/static/dashboard.js"' in response.text
-    assert "Learning Operations Center" in response.text
-    assert "Async Task Console" in response.text
-    assert "Dead Letter Queue" in response.text
-    assert "Runtime Pulse" in response.text
-    assert "Knowledge Pipeline" in response.text
-    assert "Session Workspace" in response.text
-    assert "Provider Routing" in response.text
-    assert "domain-input" in response.text
-    assert "goal-input" in response.text
-    assert "admin-key-input" in response.text
-    assert "background-input" in response.text
-    assert "time-budget-input" in response.text
-    assert "preferences-input" in response.text
-    assert "knowledge-url-input" in response.text
-    assert "knowledge-title-input" in response.text
-    assert "knowledge-content-input" in response.text
-    assert "knowledge-source-input" in response.text
-    assert "knowledge-query-input" in response.text
-    assert "task-answer-input" in response.text
-    assert "task-stream-status" in response.text
-    assert "dead-letter-list" in response.text
-    assert "runtime-summary-panel" in response.text
-    assert "config-summary-panel" in response.text
-    assert "session-files-panel" in response.text
-    assert "due-review-list" in response.text
-    assert "knowledge-results" in response.text
-    assert "load-export-preview" in response.text
-    assert "export-preview" in response.text
-    assert "latest-feedback" in response.text
-    assert "X-Admin-Key" in response.text
-    assert "answer-input" in response.text
-    assert "Queue Turn Task" in response.text
-    assert "Run Sync Turn" in response.text
-    assert "Import URL" in response.text
-    assert "Refresh Runtime" in response.text
-    assert "Load Config" in response.text
+    assert "Frontend Workspace" in response.text
+    assert "frontend/" in response.text
+    assert "npm install" in response.text
+    assert "npm run dev" in response.text
+    assert "http://127.0.0.1:5173" in response.text
+    assert "/api/sessions" in response.text
+    assert "/api/tasks/turns" in response.text
 
 
-def test_dashboard_static_assets_reference_async_task_and_runtime_apis(tmp_path: Path) -> None:
-    config_path = tmp_path / "llm.yaml"
-    _write_dashboard_config(config_path)
-    app = create_app(workspace_root=tmp_path / ".learn", config_path=config_path)
-    client = TestClient(app)
+def test_frontend_vue_workspace_exists_with_vite_proxy_and_components() -> None:
+    package_json = Path("frontend/package.json").read_text(encoding="utf-8")
+    vite_config = Path("frontend/vite.config.js").read_text(encoding="utf-8")
+    index_html = Path("frontend/index.html").read_text(encoding="utf-8")
+    main_js = Path("frontend/src/main.js").read_text(encoding="utf-8")
+    app_vue = Path("frontend/src/App.vue").read_text(encoding="utf-8")
+    api_js = Path("frontend/src/lib/api.js").read_text(encoding="utf-8")
+    tasks_vue = Path("frontend/src/components/TaskConsolePanel.vue").read_text(encoding="utf-8")
+    runtime_vue = Path("frontend/src/components/RuntimePulsePanel.vue").read_text(encoding="utf-8")
 
-    css = client.get("/static/dashboard.css")
-    js = client.get("/static/dashboard.js")
-
-    assert css.status_code == 200
-    assert "text/css" in css.headers["content-type"]
-    assert ".task-stream" in css.text
-    assert ".runtime-grid" in css.text
-    assert ".workspace-tree" in css.text
-
-    assert js.status_code == 200
-    assert "javascript" in js.headers["content-type"]
-    assert "/api/sessions" in js.text
-    assert "/api/tasks/turns" in js.text
-    assert "/api/tasks/dead-letter" in js.text
-    assert "/ws/tasks/" in js.text
-    assert "/requeue" in js.text
-    assert "/api/runtime/summary" in js.text
-    assert "/api/config" in js.text
-    assert "/api/audit" in js.text
-    assert "/api/logs/app" in js.text
-    assert "/summary" in js.text
-    assert "/timeline" in js.text
-    assert "/reviews" in js.text
-    assert "/reviews/due" in js.text
-    assert "/checkpoints" in js.text
-    assert "/knowledge/search" in js.text
-    assert "/knowledge/import-url" in js.text
-    assert "/export" in js.text
-    assert "new WebSocket" in js.text
-    assert "renderRuntimeSummary" in js.text
-    assert "renderConfigSummary" in js.text
-    assert "renderSessionWorkspace" in js.text
+    assert '"vue"' in package_json
+    assert '"vite"' in package_json
+    assert '"@vitejs/plugin-vue"' in package_json
+    assert '"dev"' in package_json
+    assert '"build"' in package_json
+    assert "defineConfig" in vite_config
+    assert "pluginVue" in vite_config
+    assert "'/api'" in vite_config or '"/api"' in vite_config
+    assert "'/ws'" in vite_config or '"/ws"' in vite_config
+    assert "127.0.0.1:8000" in vite_config
+    assert 'id="app"' in index_html
+    assert "createApp" in main_js
+    assert "App.vue" in main_js
+    assert "SessionSidebar" in app_vue
+    assert "KnowledgePipelinePanel" in app_vue
+    assert "RuntimePulsePanel" in app_vue
+    assert "TaskConsolePanel" in tasks_vue
+    assert "new WebSocket" in api_js
+    assert "/api/tasks/turns" in api_js
+    assert "/api/runtime/summary" in api_js
+    assert "RuntimePulsePanel" in runtime_vue

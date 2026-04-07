@@ -55,6 +55,19 @@ pre {
   gap: 18px;
 }
 
+.dashboard-loading {
+  grid-column: 1 / -1;
+  min-height: calc(100vh - 24px);
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  padding: 48px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow);
+}
+
 .sidebar,
 .main-column {
   display: grid;
