@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: learn-new
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: learn-new
+  template:
+    metadata:
+      labels:
+        app: learn-new
+    spec:
+      containers:
+        - name: app
+          image: learn-new:local
+          ports:
+            - containerPort: 8000
+          env:
+            - name: LEARN_NEW_CONFIG_PATH
+              value: /app/config/llm.production.yaml
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000

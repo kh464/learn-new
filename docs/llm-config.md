@@ -22,6 +22,7 @@ You can override the runtime file with `LEARN_NEW_CONFIG_PATH`.
 7. `observability` for request id and metrics behavior
 8. `sandbox` for practice execution isolation
 9. `knowledge` for vector index integration
+10. `tasks` for background worker queue behavior
 
 ## How to set the API key
 
@@ -98,6 +99,7 @@ storage:
 
 The PostgreSQL store persists session state and checkpoint metadata in SQL tables while the `.learn/` workspace continues to mirror artifacts for exports and local inspection.
 The repository also includes `config/llm.production.yaml` as a ready-made template that wires PostgreSQL, Redis, Qdrant, Docker sandboxing, and role-based tokens together.
+When running against PostgreSQL, apply Alembic migrations first with `scripts/migrate.ps1` or `alembic upgrade head`.
 
 ## Admin API key protection
 
@@ -173,6 +175,7 @@ Every response gets the header configured by `observability.request_id_header`.
 observability:
   metrics_enabled: true
   request_id_header: X-Request-ID
+  trace_id_header: X-Trace-ID
   audit_log_path: .learn/audit/events.jsonl
   app_log_path: .learn/logs/app.jsonl
   audit_log_max_lines: 5000
@@ -185,6 +188,36 @@ observability:
 `/health/ready` actively probes configured storage, rate-limit, knowledge, and sandbox backends. It returns `503` when a required backend is configured but unavailable.
 Unhandled exceptions return a JSON `500` response containing the active request id, and the event is appended to `observability.app_log_path`.
 `audit_log_max_lines` and `app_log_max_lines` trim older JSONL entries after writes so local log files stay bounded.
+If a request includes `traceparent`, the service extracts the trace id, returns it in `trace_id_header`, and writes it into audit/app log events.
+
+## Task queue
+
+Enable background turn execution:
+
+```yaml
+tasks:
+  enabled: true
+  backend: memory
+  worker_threads: 1
+  max_queue_size: 100
+```
+
+`POST /api/tasks/turns` enqueues a turn job, and `GET /api/tasks/{task_id}` returns queued/running/completed/failed status plus the final session state when complete.
+`WS /ws/tasks/{task_id}` streams live task status updates for the same task record.
+Task visibility follows the same owner isolation rules as session access.
+
+## Observability stack
+
+The repository includes:
+
+- `docker-compose.observability.yml` for Prometheus + Grafana
+- `ops/prometheus/prometheus.yml` for scrape config
+- `ops/prometheus/alerts.yml` for starter alert rules
+
+The repository also includes:
+
+- `docker-compose.edge.yml` with a Caddy reverse proxy
+- `ops/k8s/` with starter `Deployment`, `Service`, and `Ingress` manifests
 
 ## Sandbox backend
 

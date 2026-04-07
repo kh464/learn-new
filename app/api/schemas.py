@@ -25,6 +25,11 @@ class TurnRequest(BaseModel):
     learner_answer: str
 
 
+class TurnTaskRequest(BaseModel):
+    session_id: str
+    learner_answer: str
+
+
 class UploadKnowledgeRequest(BaseModel):
     title: str
     content: str
@@ -126,3 +131,23 @@ class StateResponse(BaseModel):
             active_skills=state.active_skills,
             log_count=len(state.logs),
         )
+
+
+class TaskAcceptedResponse(BaseModel):
+    task_id: str
+    task_type: str
+    session_id: str
+    status: str
+    created_at: str
+
+
+class TaskStatusResponse(BaseModel):
+    task_id: str
+    task_type: str
+    session_id: str
+    status: str
+    created_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    error: str | None = None
+    result: StateResponse | None = None

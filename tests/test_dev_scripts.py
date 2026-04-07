@@ -32,8 +32,24 @@ def test_observability_compose_templates_exist() -> None:
     compose_file = Path("docker-compose.observability.yml").read_text(encoding="utf-8")
     prometheus_file = Path("ops/prometheus/prometheus.yml").read_text(encoding="utf-8")
     datasource_file = Path("ops/grafana/provisioning/datasources/prometheus.yml").read_text(encoding="utf-8")
+    alert_rules_file = Path("ops/prometheus/alerts.yml").read_text(encoding="utf-8")
 
     assert "prometheus:" in compose_file
     assert "grafana:" in compose_file
     assert "/metrics" in prometheus_file
     assert "Prometheus" in datasource_file
+    assert "LearnNewAppDown" in alert_rules_file
+
+
+def test_edge_and_cluster_templates_exist() -> None:
+    edge_compose = Path("docker-compose.edge.yml").read_text(encoding="utf-8")
+    caddyfile = Path("ops/caddy/Caddyfile").read_text(encoding="utf-8")
+    deployment = Path("ops/k8s/deployment.yaml").read_text(encoding="utf-8")
+    service = Path("ops/k8s/service.yaml").read_text(encoding="utf-8")
+    ingress = Path("ops/k8s/ingress.yaml").read_text(encoding="utf-8")
+
+    assert "caddy:" in edge_compose
+    assert "reverse_proxy app:8000" in caddyfile
+    assert "kind: Deployment" in deployment
+    assert "kind: Service" in service
+    assert "kind: Ingress" in ingress

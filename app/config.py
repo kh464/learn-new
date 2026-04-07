@@ -85,6 +85,7 @@ class RateLimitSettings(BaseModel):
 class ObservabilitySettings(BaseModel):
     metrics_enabled: bool = True
     request_id_header: str = "X-Request-ID"
+    trace_id_header: str = "X-Trace-ID"
     audit_log_path: str | None = ".learn/audit/events.jsonl"
     app_log_path: str | None = ".learn/logs/app.jsonl"
     audit_log_max_lines: int | None = 5000
@@ -133,6 +134,22 @@ class AppConfig(BaseModel):
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
     sandbox: SandboxSettings = Field(default_factory=SandboxSettings)
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
+    tasks: "TaskQueueSettings" = Field(default_factory=lambda: TaskQueueSettings())
+
+
+class TaskQueueSettings(BaseModel):
+    enabled: bool = True
+    backend: Literal["memory"] = "memory"
+    worker_threads: int = 1
+    max_queue_size: int = 100
+
+    @model_validator(mode="after")
+    def validate_queue_settings(self) -> "TaskQueueSettings":
+        if self.worker_threads < 1:
+            raise ValueError("tasks.worker_threads must be at least 1")
+        if self.max_queue_size < 1:
+            raise ValueError("tasks.max_queue_size must be at least 1")
+        return self
 
 
 def load_config(path: Path | str = "config/llm.yaml") -> AppConfig:

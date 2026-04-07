@@ -1,5 +1,9 @@
 services:
   app:
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
       LEARN_NEW_CONFIG_PATH: /app/config/llm.production.yaml
       LEARN_NEW_POSTGRES_DSN: postgresql://learn_new:learn_new@postgres:5432/learn_new

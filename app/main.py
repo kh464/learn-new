@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+import asyncio
 import os
 from time import perf_counter
 from pathlib import Path
 from uuid import uuid4
 import importlib
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi import status
+from fastapi.websockets import WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from app.dashboard import render_dashboard
@@ -19,27 +22,32 @@ from app.api.schemas import (
     SessionSummaryResponse,
     SearchKnowledgeResponse,
     StateResponse,
+    TaskAcceptedResponse,
+    TaskStatusResponse,
     TimelineResponse,
     TurnRequest,
+    TurnTaskRequest,
     UploadKnowledgeRequest,
     UploadKnowledgeResponse,
 )
 from app.config import AppConfig, load_config
+from app.event_stream import EventBroker
 from app.knowledge import KnowledgeService
 from app.orchestrator import LearningOrchestrator
 from app.runtime_health import RuntimeHealthService
 from app.runtime_ops import AppEventLogger, AuditLogger, InMemoryRateLimiter, MetricsRegistry, RedisRateLimiter
+from app.task_queue import InMemoryTaskQueue, TaskQueueFullError
 
 
 def create_app(
     workspace_root: Path | str = Path(".learn"),
     config_path: Path | str = Path("config/llm.yaml"),
 ) -> FastAPI:
-    app = FastAPI(title="Learn New MVP", version="0.1.0")
     config = load_config(config_path)
     orchestrator = LearningOrchestrator(workspace_root=Path(workspace_root), config=config)
     metrics = MetricsRegistry()
     runtime_health = RuntimeHealthService(config=config, workspace_root=Path(workspace_root))
+    event_broker = EventBroker()
     audit_logger = (
         AuditLogger(
             Path(config.observability.audit_log_path),
@@ -54,6 +62,15 @@ def create_app(
             max_lines=config.observability.app_log_max_lines,
         )
         if config.observability.app_log_path
+        else None
+    )
+    task_queue = (
+        InMemoryTaskQueue(
+            worker_threads=config.tasks.worker_threads,
+            max_queue_size=config.tasks.max_queue_size,
+            on_update=lambda record: event_broker.publish(f"task:{record['task_id']}", record),
+        )
+        if config.tasks.enabled
         else None
     )
     rate_limiter = None
@@ -74,12 +91,27 @@ def create_app(
                 window_seconds=config.rate_limit.window_seconds,
             )
 
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        try:
+            event_broker.attach_loop(asyncio.get_running_loop())
+            if task_queue is not None:
+                task_queue.start()
+            yield
+        finally:
+            if task_queue is not None:
+                task_queue.shutdown()
+
+    app = FastAPI(title="Learn New MVP", version="0.1.0", lifespan=lifespan)
+
     app.state.orchestrator = orchestrator
     app.state.config = config
     app.state.metrics = metrics
     app.state.audit_logger = audit_logger
     app.state.app_logger = app_logger
     app.state.runtime_health = runtime_health
+    app.state.task_queue = task_queue
+    app.state.event_broker = event_broker
 
     role_levels = {"viewer": 1, "operator": 2, "admin": 3}
 
@@ -116,25 +148,42 @@ def create_app(
             return True
         return principal_name == owner_id
 
+    def can_access_task(principal_name: str, principal_role: str, owner_id: str) -> bool:
+        return can_access_session(principal_name, principal_role, owner_id)
+
+    def websocket_principal(websocket: WebSocket) -> tuple[str, str] | None:
+        provided = websocket.headers.get(config.security.api_key_header)
+        if not config.security.enabled:
+            return "anonymous", "admin"
+        principal = get_principal(provided)
+        if principal is None:
+            return None
+        return principal
+
     @app.middleware("http")
     async def production_guards(request: Request, call_next):
         request_id = uuid4().hex
+        trace_id = _resolve_trace_id(request.headers.get("traceparent")) or request_id
         started = perf_counter()
         request_id_header = config.observability.request_id_header
+        trace_id_header = config.observability.trace_id_header
         principal_name = "anonymous"
         principal_role = "anonymous"
         request.state.request_id = request_id
+        request.state.trace_id = trace_id
         request.state.principal_name = principal_name
         request.state.principal_role = principal_role
 
         def finalize(response):
             latency_ms = (perf_counter() - started) * 1000
             response.headers[request_id_header] = request_id
+            response.headers[trace_id_header] = trace_id
             metrics.record(response.status_code, latency_ms, path=request.url.path)
             if audit_logger is not None and request.url.path not in {"/health", "/health/ready"}:
                 audit_logger.append(
                     {
                         "request_id": request_id,
+                        "trace_id": trace_id,
                         "method": request.method,
                         "path": request.url.path,
                         "status_code": response.status_code,
@@ -173,6 +222,7 @@ def create_app(
                     {
                         "event": "unhandled_exception",
                         "request_id": request_id,
+                        "trace_id": trace_id,
                         "method": request.method,
                         "path": request.url.path,
                         "principal": principal_name,
@@ -222,6 +272,8 @@ def create_app(
             audit_recent_count=len(audit_logger.read_recent(limit=20)) if audit_logger is not None else 0,
             app_log_enabled=app_logger is not None,
             app_log_recent_count=len(app_logger.read_recent(limit=20)) if app_logger is not None else 0,
+            task_queue_enabled=task_queue is not None,
+            task_queue_snapshot=task_queue.snapshot() if task_queue is not None else None,
             session_total=app.state.orchestrator.list_sessions()["total"],
         )
 
@@ -313,6 +365,81 @@ def create_app(
             raise HTTPException(status_code=404, detail="Session not found") from exc
         return StateResponse.from_state(state)
 
+    @app.post("/api/tasks/turns", response_model=TaskAcceptedResponse, status_code=202)
+    def enqueue_turn_task(payload: TurnTaskRequest, request: Request) -> TaskAcceptedResponse:
+        if task_queue is None:
+            raise HTTPException(status_code=503, detail="Task queue disabled")
+        try:
+            state = app.state.orchestrator.get_state(payload.session_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Session not found") from exc
+        if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+        try:
+            task = task_queue.submit(
+                task_type="turn",
+                session_id=payload.session_id,
+                owner_id=state.owner_id or request.state.principal_name,
+                runner=lambda: StateResponse.from_state(
+                    app.state.orchestrator.run_turn(
+                        session_id=payload.session_id,
+                        learner_answer=payload.learner_answer,
+                    )
+                ).model_dump(mode="json"),
+            )
+        except TaskQueueFullError as exc:
+            raise HTTPException(status_code=503, detail="Task queue full") from exc
+        return TaskAcceptedResponse.model_validate(task)
+
+    @app.get("/api/tasks/{task_id}", response_model=TaskStatusResponse)
+    def get_task_status(task_id: str, request: Request) -> TaskStatusResponse:
+        if task_queue is None:
+            raise HTTPException(status_code=503, detail="Task queue disabled")
+        try:
+            task = task_queue.get(task_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Task not found") from exc
+        if not can_access_task(request.state.principal_name, request.state.principal_role, task["owner_id"]):
+            raise HTTPException(status_code=404, detail="Task not found")
+        return TaskStatusResponse.model_validate(task)
+
+    @app.websocket("/ws/tasks/{task_id}")
+    async def stream_task_status(task_id: str, websocket: WebSocket) -> None:
+        principal = websocket_principal(websocket)
+        if principal is None:
+            await websocket.close(code=1008)
+            return
+        principal_name, principal_role = principal
+        if task_queue is None:
+            await websocket.close(code=1013)
+            return
+        try:
+            task = task_queue.get(task_id)
+        except FileNotFoundError:
+            await websocket.close(code=1008)
+            return
+        if not can_access_task(principal_name, principal_role, task["owner_id"]):
+            await websocket.close(code=1008)
+            return
+        await websocket.accept()
+        subscriber_id, queue = await event_broker.subscribe(f"task:{task_id}")
+        try:
+            current = task_queue.get(task_id)
+            await websocket.send_json(current)
+            if current["status"] in {"completed", "failed"}:
+                await websocket.close()
+                return
+            while True:
+                update = await queue.get()
+                await websocket.send_json(update)
+                if update["status"] in {"completed", "failed"}:
+                    await websocket.close()
+                    return
+        except WebSocketDisconnect:
+            return
+        finally:
+            await event_broker.unsubscribe(f"task:{task_id}", subscriber_id)
+
     @app.get("/api/sessions/{session_id}/reviews/due", response_model=DueReviewResponse)
     def get_due_reviews(session_id: str, request: Request) -> DueReviewResponse:
         try:
@@ -393,3 +520,17 @@ def create_app(
 
 
 app = create_app(config_path=Path(os.getenv("LEARN_NEW_CONFIG_PATH", "config/llm.yaml")))
+
+
+def _resolve_trace_id(traceparent: str | None) -> str | None:
+    if not traceparent:
+        return None
+    parts = traceparent.split("-")
+    if len(parts) != 4:
+        return None
+    candidate = parts[1]
+    if len(candidate) != 32:
+        return None
+    if any(char not in "0123456789abcdef" for char in candidate.lower()):
+        return None
+    return candidate.lower()

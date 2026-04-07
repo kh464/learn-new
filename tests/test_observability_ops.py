@@ -190,3 +190,56 @@ def test_admin_can_read_recent_app_logs(tmp_path: Path) -> None:
     payload = allowed.json()
     assert len(payload["items"]) == 1
     assert payload["items"][0]["event"] == "unhandled_exception"
+
+
+def test_trace_id_is_propagated_to_response_and_audit_log(tmp_path: Path) -> None:
+    config_path = tmp_path / "llm.yaml"
+    audit_path = tmp_path / ".learn" / "audit" / "events.jsonl"
+    config_path.write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "llm:",
+                "  default_provider: siliconflow",
+                "  default_profile: chat",
+                "  providers:",
+                "    siliconflow:",
+                "      enabled: true",
+                "      base_url: https://api.siliconflow.cn/v1",
+                "      api_key:",
+                "      models:",
+                "        chat: Qwen/Qwen2.5-7B-Instruct",
+                "  routing:",
+                "    profiles:",
+                "      chat:",
+                "        provider: siliconflow",
+                "        model: Qwen/Qwen2.5-7B-Instruct",
+                "security:",
+                "  enabled: true",
+                "  api_key_header: X-Admin-Key",
+                "  principals:",
+                "    - name: admin",
+                "      api_key: admin-key",
+                "      role: admin",
+                "observability:",
+                "  metrics_enabled: true",
+                "  request_id_header: X-Request-ID",
+                "  trace_id_header: X-Trace-ID",
+                "  audit_log_path: " + audit_path.as_posix(),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    app = create_app(workspace_root=tmp_path / ".learn", config_path=config_path)
+    client = TestClient(app)
+
+    traceparent = "00-1234567890abcdef1234567890abcdef-0123456789abcdef-01"
+    response = client.get(
+        "/api/config",
+        headers={"X-Admin-Key": "admin-key", "traceparent": traceparent},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-Trace-ID"] == "1234567890abcdef1234567890abcdef"
+    items = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert items[-1]["trace_id"] == "1234567890abcdef1234567890abcdef"

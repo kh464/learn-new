@@ -37,6 +37,8 @@ class RuntimeHealthService:
         audit_recent_count: int,
         app_log_enabled: bool,
         app_log_recent_count: int,
+        task_queue_enabled: bool,
+        task_queue_snapshot: dict | None,
         session_total: int,
     ) -> dict:
         checks = self.checks()
@@ -59,6 +61,10 @@ class RuntimeHealthService:
                 "enabled": app_log_enabled,
                 "recent_count": app_log_recent_count,
                 "path": self.config.observability.app_log_path,
+            },
+            "tasks": {
+                "enabled": task_queue_enabled,
+                "snapshot": task_queue_snapshot,
             },
             "sessions": {
                 "total": session_total,

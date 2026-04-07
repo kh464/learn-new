@@ -1,0 +1,17 @@
+groups:
+  - name: learn-new-alerts
+    rules:
+      - alert: LearnNewAppDown
+        expr: up{job="learn-new-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Learn New app is unreachable
+      - alert: LearnNewHighHttp5xxRate
+        expr: increase(learn_new_requests_by_status_total{status="500"}[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Learn New app is returning elevated 5xx responses
