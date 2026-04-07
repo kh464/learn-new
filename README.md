@@ -62,6 +62,15 @@ $env:SILICONFLOW_API_KEY="你的真实key"
 http://127.0.0.1:8000/dashboard
 ```
 
+仪表盘当前可直接完成这些操作：
+
+- 创建学习 session
+- 上传本地知识片段到当前 session
+- 提交 learner answer 推进一轮教学
+- 启动显式 review 回合
+- 恢复历史 checkpoint
+- 导出当前 session JSON
+
 服务启动后可访问：
 
 - `GET /dashboard`
@@ -223,7 +232,7 @@ Invoke-RestMethod `
 - 已实现 checkpoint 列表与恢复接口，可从 `.learn/checkpoints` 显式回滚 session 状态
 - 已实现 session export 接口，可导出 summary、timeline、checkpoint 和核心工件
 - 已实现 session index 接口，前端仪表盘可以直接列出全部学习会话
-- 已实现轻量 dashboard 页面，可直接消费现有 API 展示 session list、summary、timeline、lesson 和 practice
+- 已实现轻量 dashboard 页面，可直接消费现有 API 展示 session list、summary、timeline、lesson、practice，并支持创建 session、上传知识、提交回答、启动 review、恢复 checkpoint、导出 session
 
 后续扩展优先级建议：
 

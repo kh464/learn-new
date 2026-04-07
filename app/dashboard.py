@@ -110,7 +110,8 @@ def render_dashboard() -> HTMLResponse:
       letter-spacing: 0.12em;
     }
 
-    .field input {
+    .field input,
+    .field textarea {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 14px;
@@ -118,6 +119,11 @@ def render_dashboard() -> HTMLResponse:
       padding: 12px 14px;
       font: 15px/1.3 var(--serif);
       color: var(--ink);
+    }
+
+    .field textarea {
+      min-height: 120px;
+      resize: vertical;
     }
 
     .session-card {
@@ -335,11 +341,11 @@ def render_dashboard() -> HTMLResponse:
       <form id="create-session-form" class="create-form">
         <div class="field">
           <label for="domain-input">Domain</label>
-          <input id="domain-input" name="domain" placeholder="Python 异步编程" />
+          <input id="domain-input" name="domain" placeholder="Python async programming" />
         </div>
         <div class="field">
           <label for="goal-input">Goal</label>
-          <input id="goal-input" name="goal" placeholder="掌握 async/await" />
+          <input id="goal-input" name="goal" placeholder="Master async/await" />
         </div>
         <button class="action" type="submit">Create Session</button>
       </form>
@@ -382,6 +388,28 @@ def render_dashboard() -> HTMLResponse:
             <h3>Practice</h3>
             <p id="practice-text" class="subtle">No practice yet.</p>
             <div id="practice-rubric" class="codebox" hidden></div>
+          </article>
+
+          <article class="block">
+            <h3>Knowledge Intake</h3>
+            <p class="subtle">Upload notes, excerpts, or snippets that should influence the next teaching turn.</p>
+            <form id="knowledge-form" class="turn-form">
+              <div class="field">
+                <label for="knowledge-title-input">Title</label>
+                <input id="knowledge-title-input" name="title" placeholder="Async Notes" />
+              </div>
+              <div class="field">
+                <label for="knowledge-source-input">Source</label>
+                <input id="knowledge-source-input" name="source" placeholder="user://dashboard" value="user://dashboard" />
+              </div>
+              <div class="field">
+                <label for="knowledge-content-input">Content</label>
+                <textarea id="knowledge-content-input" name="content" placeholder="Paste notes, references, or constraints for the current learning session."></textarea>
+              </div>
+              <div class="actions">
+                <button class="action" type="submit">Upload Knowledge</button>
+              </div>
+            </form>
           </article>
 
           <article class="block">
@@ -429,6 +457,10 @@ def render_dashboard() -> HTMLResponse:
     const subtitle = document.getElementById('subtitle');
     const turnForm = document.getElementById('turn-form');
     const answerInput = document.getElementById('answer-input');
+    const knowledgeForm = document.getElementById('knowledge-form');
+    const knowledgeTitleInput = document.getElementById('knowledge-title-input');
+    const knowledgeSourceInput = document.getElementById('knowledge-source-input');
+    const knowledgeContentInput = document.getElementById('knowledge-content-input');
     const lessonText = document.getElementById('lesson-text');
     const lessonQuiz = document.getElementById('lesson-quiz');
     const practiceText = document.getElementById('practice-text');
@@ -500,7 +532,7 @@ def render_dashboard() -> HTMLResponse:
       }
 
       title.textContent = session.domain;
-      subtitle.textContent = `Session ${session.session_id} · mode=${session.teaching_mode} · skills=${session.active_skills.length}`;
+      subtitle.textContent = `Session ${session.session_id} | mode=${session.teaching_mode} | skills=${session.active_skills.length}`;
       hero.innerHTML = [
         renderMetric('Stage', summary.current_stage),
         renderMetric('Mode', summary.teaching_mode),
@@ -647,6 +679,31 @@ def render_dashboard() -> HTMLResponse:
       setStatus(`Restored checkpoint ${checkpointId}.`);
     }
 
+    async function uploadKnowledge() {
+      if (!state.activeSessionId) {
+        setStatus('Select or create a session first.');
+        return;
+      }
+      const title = knowledgeTitleInput.value.trim();
+      const content = knowledgeContentInput.value.trim();
+      const source = knowledgeSourceInput.value.trim() || 'user://dashboard';
+      if (!title || !content) {
+        setStatus('Upload Knowledge requires both title and content.');
+        return;
+      }
+      setStatus('Uploading knowledge...');
+      await fetchJson(`/api/sessions/${state.activeSessionId}/knowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, content, source }),
+      });
+      knowledgeTitleInput.value = '';
+      knowledgeContentInput.value = '';
+      knowledgeSourceInput.value = source;
+      await loadSession(state.activeSessionId);
+      setStatus('Knowledge uploaded.');
+    }
+
     function openExport() {
       if (!state.activeSessionId) return;
       window.open(`/api/sessions/${state.activeSessionId}/export`, '_blank');
@@ -684,6 +741,11 @@ def render_dashboard() -> HTMLResponse:
     turnForm.addEventListener('submit', (event) => {
       event.preventDefault();
       submitTurn().catch((error) => setStatus(`Submit Turn failed: ${error.message}`));
+    });
+
+    knowledgeForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      uploadKnowledge().catch((error) => setStatus(`Upload Knowledge failed: ${error.message}`));
     });
 
     refreshButton.addEventListener('click', () => {
