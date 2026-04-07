@@ -125,3 +125,54 @@ def test_web_fetcher_rejects_non_http_urls() -> None:
 
     with pytest.raises(ValueError):
         fetcher.fetch("file:///tmp/secrets.txt")
+
+
+class _FakeWebResponse:
+    def __init__(self, body: bytes, content_type: str = "text/html; charset=utf-8") -> None:
+        self._body = body
+        self.headers = {"Content-Type": content_type}
+
+    def read(self, size: int = -1) -> bytes:
+        if size < 0:
+            return self._body
+        return self._body[:size]
+
+    def __enter__(self) -> "_FakeWebResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
+def test_web_fetcher_rejects_private_network_hosts() -> None:
+    fetcher = WebKnowledgeFetcher()
+
+    with pytest.raises(ValueError):
+        fetcher.fetch("http://127.0.0.1/internal")
+
+    with pytest.raises(ValueError):
+        fetcher.fetch("http://localhost/internal")
+
+
+def test_web_fetcher_rejects_non_text_content_type(monkeypatch) -> None:
+    fetcher = WebKnowledgeFetcher()
+
+    monkeypatch.setattr(
+        "app.web_fetch.request.urlopen",
+        lambda req, timeout=0: _FakeWebResponse(b"%PDF-1.4", content_type="application/pdf"),
+    )
+
+    with pytest.raises(RuntimeError):
+        fetcher.fetch("https://example.com/file.pdf")
+
+
+def test_web_fetcher_rejects_oversized_response(monkeypatch) -> None:
+    fetcher = WebKnowledgeFetcher(timeout_seconds=3)
+
+    monkeypatch.setattr(
+        "app.web_fetch.request.urlopen",
+        lambda req, timeout=0: _FakeWebResponse(b"a" * 600_000, content_type="text/plain"),
+    )
+
+    with pytest.raises(RuntimeError):
+        fetcher.fetch("https://example.com/huge")

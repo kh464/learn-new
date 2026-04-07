@@ -4,6 +4,8 @@ metadata:
   name: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    {{- toYaml .Values.deploymentStrategy | nindent 4 }}
   selector:
     matchLabels:
       app: {{ .Release.Name }}
@@ -11,14 +13,23 @@ spec:
     metadata:
       labels:
         app: {{ .Release.Name }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       serviceAccountName: {{ default .Release.Name .Values.serviceAccount.name }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -46,6 +57,13 @@ spec:
               port: {{ .Values.service.targetPort }}
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.startupProbe.path }}
+              port: {{ .Values.service.targetPort }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           {{- if .Values.secretMount.enabled }}
@@ -66,3 +84,5 @@ spec:
         {{- toYaml .Values.tolerations | nindent 8 }}
       affinity:
         {{- toYaml .Values.affinity | nindent 8 }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}

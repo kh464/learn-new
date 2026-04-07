@@ -83,3 +83,46 @@ def test_helm_chart_templates_exist() -> None:
     assert "kind: Role" in role
     assert "kind: RoleBinding" in rolebinding
     assert "kind: NetworkPolicy" in networkpolicy
+
+
+def test_dockerfile_uses_multi_stage_non_root_packaging() -> None:
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+
+    assert "AS builder" in dockerfile
+    assert "python -m build --wheel" in dockerfile
+    assert "pip install /tmp/learn_new.whl" in dockerfile
+    assert "USER 10001" in dockerfile
+    assert "HEALTHCHECK" in dockerfile
+
+
+def test_helm_chart_supports_rollout_and_ingress_hardening_controls() -> None:
+    values = Path("ops/helm/learn-new/values.yaml").read_text(encoding="utf-8")
+    deployment = Path("ops/helm/learn-new/templates/deployment.yaml").read_text(encoding="utf-8")
+    serviceaccount = Path("ops/helm/learn-new/templates/serviceaccount.yaml").read_text(encoding="utf-8")
+    ingress = Path("ops/helm/learn-new/templates/ingress.yaml").read_text(encoding="utf-8")
+
+    assert "startupProbe:" in values
+    assert "imagePullSecrets:" in values
+    assert "topologySpreadConstraints:" in values
+    assert "automountServiceAccountToken:" in values
+    assert ".Values.startupProbe.path" in deployment
+    assert ".Values.imagePullSecrets" in deployment
+    assert ".Values.topologySpreadConstraints" in deployment
+    assert ".Values.serviceAccount.automountServiceAccountToken" in serviceaccount
+    assert ".Values.ingress.annotations" in ingress
+    assert ".Values.ingress.tls" in ingress
+
+
+def test_ci_cd_workflows_and_production_verification_script_exist() -> None:
+    ci = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+    verify = Path("scripts/verify-production.ps1").read_text(encoding="utf-8")
+
+    assert "pytest tests -q" in ci
+    assert "docker build" in ci
+    assert "helm template" in ci
+    assert "workflow_dispatch:" in release
+    assert "docker buildx build" in release
+    assert "pytest tests -q" in verify
+    assert "docker build" in verify
+    assert "helm template" in verify

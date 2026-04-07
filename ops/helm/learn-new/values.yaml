@@ -5,9 +5,20 @@ image:
   tag: local
   pullPolicy: IfNotPresent
 
+imagePullSecrets: []
+
 podAnnotations: {}
+podLabels: {}
 
 podSecurityContext: {}
+
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+terminationGracePeriodSeconds: 30
 
 containerSecurityContext:
   runAsNonRoot: true
@@ -24,9 +35,11 @@ service:
 
 ingress:
   enabled: true
+  annotations: {}
   className: ""
   host: learn-new.local
   path: /
+  tls: []
 
 resources:
   requests:
@@ -53,6 +66,8 @@ env:
 serviceAccount:
   create: true
   name: ""
+  annotations: {}
+  automountServiceAccountToken: false
 
 rbac:
   create: true
@@ -81,6 +96,13 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 10
 
+startupProbe:
+  path: /health/ready
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 12
+
 nodeSelector: {}
 tolerations: []
 affinity: {}
+topologySpreadConstraints: []

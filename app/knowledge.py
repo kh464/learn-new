@@ -24,7 +24,8 @@ class KnowledgeService:
         if marker_path.exists():
             return []
 
-        upload_path = session_root / "user_uploads" / f"{title}.txt"
+        safe_title = self._safe_title(title)
+        upload_path = session_root / "user_uploads" / f"{safe_title}.txt"
         upload_path.parent.mkdir(parents=True, exist_ok=True)
         upload_path.write_text(normalized_content, encoding="utf-8")
         marker_path.write_text(
@@ -166,3 +167,9 @@ class KnowledgeService:
             if normalized:
                 tokens.append(normalized)
         return tokens
+
+    def _safe_title(self, title: str) -> str:
+        normalized = title.replace("\\", "/").split("/")[-1]
+        normalized = re.sub(r"[^a-zA-Z0-9_\-\u4e00-\u9fff ]+", "_", normalized)
+        normalized = " ".join(normalized.split()).strip(" ._")
+        return normalized or "knowledge-note"

@@ -64,3 +64,26 @@ def test_instructor_uses_retrieved_knowledge_in_fallback_lesson(tmp_path: Path) 
 
     assert updated.lesson is not None
     assert "event loop 负责在单线程内调度多个协程任务" in updated.lesson.explanation
+
+
+def test_knowledge_service_sanitizes_uploaded_title_before_writing_file(tmp_path: Path) -> None:
+    manager = WorkspaceManager(root=tmp_path / ".learn")
+    state = LearnerState.new(
+        domain="Python async programming",
+        profile=LearnerProfile(goal="Master async/await"),
+    )
+    manager.bootstrap_session(state)
+    service = KnowledgeService(manager)
+
+    service.ingest_text(
+        session_id=state.session_id,
+        title="../escape/../../notes:<async>*?",
+        content="safe content",
+        source="user://notes",
+    )
+
+    uploads = list((tmp_path / ".learn" / "sessions" / state.session_id / "user_uploads").glob("*.txt"))
+
+    assert len(uploads) == 1
+    assert uploads[0].parent.name == "user_uploads"
+    assert ".." not in uploads[0].name

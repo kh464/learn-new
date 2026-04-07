@@ -263,7 +263,8 @@ The PostgreSQL backend uses lease-based task claiming so an abandoned running ta
 ## External knowledge import
 
 `POST /api/sessions/{session_id}/knowledge/import-url` fetches remote page content, extracts readable text, and ingests it into the session knowledge index.
-Only `http` and `https` URLs are accepted.
+Only public `http` and `https` URLs are accepted.
+The fetcher rejects localhost/private-network targets, non-text content types, and oversized responses.
 Imports are idempotent per `source + content` fingerprint, so retrying the same URL does not duplicate stored chunks.
 
 ## Observability stack

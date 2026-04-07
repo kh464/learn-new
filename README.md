@@ -108,6 +108,12 @@ docker compose -f docker-compose.yml -f docker-compose.infra.yml -f docker-compo
 docker compose -f docker-compose.yml -f docker-compose.infra.yml -f docker-compose.edge.yml up --build
 ```
 
+执行本地生产验证基线：
+
+```powershell
+.\scripts\verify-production.ps1
+```
+
 如果你直接在 Windows 终端里运行 Python 命令看到中文显示异常，优先使用 `scripts/dev.ps1` 和 `scripts/test.ps1`。
 这两个脚本会先把控制台和 Python I/O 切到 UTF-8，再启动服务或测试。
 
@@ -180,7 +186,8 @@ http://127.0.0.1:8000/dashboard
 `POST /api/tasks/{task_id}/requeue` 可把 failed task 复制为新的 queued task，再次进入 worker 队列。
 `WS /ws/tasks/{task_id}` 可流式接收后台任务的状态变化；dashboard 为了兼容浏览器环境，支持通过 query string 传递 `api_key` 连接该 WebSocket。
 `POST /api/sessions/{session_id}/knowledge/import-url` 可抓取外部 URL 文本并直接入库到当前 session 知识索引。
-URL 导入目前只接受 `http/https`，并按 `source + content` 指纹做幂等去重，重复导入不会重复写入 chunk。
+URL 导入目前只接受公网 `http/https` 文本页面，并按 `source + content` 指纹做幂等去重，重复导入不会重复写入 chunk。
+导入链路会拒绝 `localhost`、私网 IP、非文本 content-type，以及超出大小上限的响应，避免把 dashboard 变成 SSRF 或大文件入口。
 配置中的 secret 现在除了环境变量、挂载文件和 `LEARN_NEW_SECRET_DIR` 之外，也支持 HashiCorp Vault KV v2 引用，例如 `${vault:secret/data/learn-new#siliconflow_api_key}`。
 
 如果启用了 `security.enabled=true`，除 `GET /health`、`GET /health/ready`、`GET /dashboard` 之外的接口都需要携带 `X-Admin-Key`。
@@ -370,6 +377,7 @@ docker build -t learn-new:local .
 - 已补充 `Dockerfile`、`.dockerignore`、`docker-compose.yml` 作为单节点部署底座
 - 已补充 `config/llm.production.yaml` 和 `docker-compose.infra.yml`，可直接拉起 PostgreSQL、Redis、Qdrant 的基础生产模板
 - 容器模板已补充 healthcheck、只读根文件系统、`no-new-privileges`、`cap_drop=ALL`、`tmpfs` 与 `pids_limit`
+- `Dockerfile` 现已升级为多阶段构建、wheel 安装、非 root 运行与镜像内建 `HEALTHCHECK`
 - 已补充 Alembic 迁移目录、首个 PostgreSQL schema migration、`scripts/migrate.ps1`，以及容器启动前自动 `alembic upgrade head`
 - 已补充内存型异步 task queue 和后台 worker，可把 turn 执行从请求线程移到后台并按 owner 隔离任务查询
 - 已补充可切换的 SQLite 持久化任务队列后端，任务状态可跨进程重启保留，并支持有限次自动重试
@@ -381,6 +389,9 @@ docker build -t learn-new:local .
 - 已补充 Caddy 反向代理模板和 K8s deployment/service/ingress 清单
 - 已补充 URL 抓取式外部知识导入，并带 `http/https` 护栏和幂等去重
 - 已补充 Helm chart 模板，并覆盖 ConfigMap、Secret、HPA、PDB、ServiceAccount、RBAC、NetworkPolicy、探针、resources 和 secret 挂载参数
+- Helm chart 进一步补充了 `startupProbe`、`imagePullSecrets`、`ingress annotations/tls`、`topologySpreadConstraints` 与 `automountServiceAccountToken` 控制项
+- 已补充 `.github/workflows/ci.yml` 与 `.github/workflows/release.yml`，覆盖测试、镜像构建、Helm 渲染和 release image 构建基线
+- 已补充 `scripts/verify-production.ps1`，可在本地执行测试、镜像构建与 Helm 渲染三段式生产校验
 - 已补充基础备份与恢复脚本，带 manifest 校验与显式 `-Force` 护栏，便于单节点灾备和本地恢复
 
 后续扩展优先级建议：
