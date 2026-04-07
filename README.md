@@ -7,10 +7,12 @@
 - FastAPI 服务
 - LangGraph 编排学习流程
 - 本地 `.learn/` 文件系统持久化
+- 可选 SQLite 会话状态与 checkpoint 元数据存储
 - 本地知识上传、分块检索和轻量 RAG
 - 本地 Python 沙箱执行与代码练习评估
 - 研究、课程、技能、讲解、练习、进度六类 agent
 - 可通过 `config/llm.yaml` 扩展到真实模型提供商
+- 支持可选 admin API key、基础限流、`/metrics` 和请求 ID
 - 默认支持 SiliconFlow，且在无可用 API Key 时自动回退到本地 deterministic 模式
 
 ## 项目结构
@@ -53,6 +55,12 @@ $env:SILICONFLOW_API_KEY="你的真实key"
 .\scripts\dev.ps1
 ```
 
+容器方式启动：
+
+```powershell
+docker compose up --build
+```
+
 如果你直接在 Windows 终端里运行 Python 命令看到中文显示异常，优先使用 `scripts/dev.ps1` 和 `scripts/test.ps1`。
 这两个脚本会先把控制台和 Python I/O 切到 UTF-8，再启动服务或测试。
 
@@ -79,6 +87,7 @@ http://127.0.0.1:8000/dashboard
 
 - `GET /dashboard`
 - `GET /health`
+- `GET /metrics`
 - `GET /api/config`
 - `GET /api/sessions`
 - `POST /api/sessions`
@@ -95,6 +104,9 @@ http://127.0.0.1:8000/dashboard
 - `POST /api/sessions/{session_id}/turns`
 
 `GET /api/config` 会返回当前默认 provider、默认 profile，以及 `llm_available`，用于判断当前是否会走真实模型。
+
+如果启用了 `security.enabled=true`，除 `GET /health` 之外的接口都需要携带 `X-Admin-Key`。
+如果启用了 `rate_limit.enabled=true`，服务会按进程内窗口做基础限流。
 
 ## API 示例
 
@@ -222,21 +234,29 @@ Invoke-RestMethod `
 .\scripts\test.ps1
 ```
 
+构建生产镜像：
+
+```powershell
+docker build -t learn-new:local .
+```
+
 ## 实现说明
 
 这个版本是可运行 MVP，不是完整生产版。为了把架构文档里的核心思想尽快落到代码里，当前做了这些取舍：
 
 - 默认使用确定性本地 agent 逻辑，避免没有外部服务时项目无法运行
 - 已接入 `config/llm.yaml` 和真实 LLM 网关；当 SiliconFlow key 可用时，`Researcher`、`Instructor`、`Practice` 会优先调用真实模型
-- 使用本地文件系统代替 Redis/PostgreSQL/Qdrant
+- 仍以本地文件系统为主，但已支持可选 SQLite 会话元数据存储，便于向正式数据库演进
 - 使用本地轻量 Python 沙箱代替 E2B/Docker，适合开发期验证，不是生产级隔离
 - 用 LangGraph 保留父 agent 主控和阶段流转结构
 - 已实现基础间隔复习和显式 review 回合入口，连续低分会切到 remedial 教学模式
 - 已实现 timeline/summary 可观察性接口，前端可以直接读取 session 概览、掌握度和事件流
+- 已实现基础 admin API key 鉴权、进程内限流、`/metrics` 指标和 request id 响应头
 - 已实现 checkpoint 列表与恢复接口，可从 `.learn/checkpoints` 显式回滚 session 状态
 - 已实现 session export 接口，可导出 summary、timeline、checkpoint 和核心工件
 - 已实现 session index 接口，前端仪表盘可以直接列出全部学习会话
 - 已实现轻量 dashboard 页面，可直接消费现有 API 展示 session list、summary、timeline、lesson、practice、latest feedback、due review queue、knowledge search、export preview，并支持创建 session、上传知识、检索知识、提交回答、启动 review、恢复 checkpoint、预览导出、导出 session
+- 已补充 `Dockerfile`、`.dockerignore`、`docker-compose.yml` 作为单节点部署底座
 
 后续扩展优先级建议：
 

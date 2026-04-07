@@ -1,0 +1,17 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: learn-new:local
+    ports:
+      - "8000:8000"
+    environment:
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
+      LEARN_NEW_ADMIN_KEY: ${LEARN_NEW_ADMIN_KEY:-}
+    volumes:
+      - learn_new_workspace:/app/.learn
+    restart: unless-stopped
+
+volumes:
+  learn_new_workspace:

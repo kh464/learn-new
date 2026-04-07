@@ -6,6 +6,7 @@ from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
+from typing_extensions import Literal
 
 
 class ProviderConfig(BaseModel):
@@ -30,9 +31,35 @@ class LLMSettings(BaseModel):
     routing: dict[str, dict[str, RoutingProfile]] = Field(default_factory=dict)
 
 
+class StorageSettings(BaseModel):
+    backend: Literal["file", "sqlite"] = "file"
+    sqlite_path: str | None = None
+
+
+class SecuritySettings(BaseModel):
+    enabled: bool = False
+    api_key_header: str = "X-Admin-Key"
+    api_key: str | None = None
+
+
+class RateLimitSettings(BaseModel):
+    enabled: bool = False
+    requests: int = 120
+    window_seconds: int = 60
+
+
+class ObservabilitySettings(BaseModel):
+    metrics_enabled: bool = True
+    request_id_header: str = "X-Request-ID"
+
+
 class AppConfig(BaseModel):
     version: int = 1
     llm: LLMSettings
+    storage: StorageSettings = Field(default_factory=StorageSettings)
+    security: SecuritySettings = Field(default_factory=SecuritySettings)
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
 
 def load_config(path: Path | str = "config/llm.yaml") -> AppConfig:

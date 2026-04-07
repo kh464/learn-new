@@ -14,6 +14,7 @@ from app.agents.research import ResearcherAgent
 from app.agents.skillforge import SkillForgeAgent
 from app.llm import LLMGateway
 from app.models import LearnerProfile, LearnerState
+from app.session_store import SQLiteSessionStore
 from app.sandbox import PythonSandbox
 from app.workspace import WorkspaceManager
 
@@ -26,6 +27,7 @@ class GraphState(TypedDict):
 class LearningOrchestrator:
     def __init__(self, workspace_root: Path, config: AppConfig | None = None) -> None:
         self.workspace = WorkspaceManager(root=Path(workspace_root))
+        self.session_store = self._build_session_store(workspace_root=Path(workspace_root), config=config)
         self.llm = LLMGateway(config=config) if config is not None else None
         self.researcher = ResearcherAgent(llm=self.llm)
         self.curriculum = CurriculumArchitectAgent()
@@ -38,17 +40,19 @@ class LearningOrchestrator:
     def create_session(self, domain: str, profile: LearnerProfile) -> LearnerState:
         state = LearnerState.new(domain=domain, profile=profile)
         self.workspace.bootstrap_session(state)
+        if self.session_store is not None:
+            self.session_store.save_state(state)
         return state
 
     def get_state(self, session_id: str) -> LearnerState:
-        return self.workspace.load_state(session_id)
+        return self._load_state(session_id)
 
     def get_due_reviews(self, session_id: str) -> list[str]:
-        state = self.workspace.load_state(session_id)
+        state = self._load_state(session_id)
         return self.progress.collect_due_concepts(state)
 
     def get_session_timeline(self, session_id: str, limit: int = 20) -> dict:
-        state = self.workspace.load_state(session_id)
+        state = self._load_state(session_id)
         items = [
             {
                 "timestamp": event.timestamp.isoformat(),
@@ -60,7 +64,7 @@ class LearningOrchestrator:
         return {"items": items}
 
     def get_session_summary(self, session_id: str) -> dict:
-        state = self.workspace.load_state(session_id)
+        state = self._load_state(session_id)
         due_reviews = self.progress.collect_due_concepts(state)
         mastery_items = list(state.mastery_matrix.items())
         average_score = (
@@ -93,6 +97,8 @@ class LearningOrchestrator:
         }
 
     def list_checkpoints(self, session_id: str) -> dict:
+        if self.session_store is not None:
+            return {"items": self.session_store.list_checkpoints(session_id)}
         items = []
         for path in self.workspace.list_checkpoints(session_id):
             state = LearnerState.model_validate_json(path.read_text(encoding="utf-8"))
@@ -115,14 +121,14 @@ class LearningOrchestrator:
         return {"items": items}
 
     def restore_checkpoint(self, session_id: str, checkpoint_id: str) -> LearnerState:
-        state = self.workspace.load_checkpoint(session_id, checkpoint_id)
+        state = self._load_checkpoint(session_id, checkpoint_id)
         state.add_log("checkpoint_restored", f"Restored checkpoint {checkpoint_id}.")
-        self.workspace.save_state(state)
-        self.workspace.write_checkpoint(state)
+        self._persist_state(state)
+        self._write_checkpoint(state)
         return state
 
     def export_session(self, session_id: str) -> dict:
-        state = self.workspace.load_state(session_id)
+        state = self._load_state(session_id)
         session_root = self.workspace.session_root(session_id)
 
         def read_text_if_exists(path: Path) -> str | None:
@@ -166,8 +172,8 @@ class LearningOrchestrator:
 
     def list_sessions(self) -> dict:
         items = []
-        for session_id in self.workspace.list_session_ids():
-            state = self.workspace.load_state(session_id)
+        for session_id in self._list_session_ids():
+            state = self._load_state(session_id)
             summary = self.get_session_summary(session_id)
             items.append(
                 {
@@ -182,12 +188,12 @@ class LearningOrchestrator:
         return {"total": len(items), "items": items}
 
     def start_review(self, session_id: str, concepts: list[str] | None = None) -> LearnerState:
-        state = self.workspace.load_state(session_id)
+        state = self._load_state(session_id)
         state = self.curriculum.run(state, self.workspace)
         due_concepts = concepts or self.progress.collect_due_concepts(state)
         if not due_concepts:
             state.add_log("review_skipped", "No due review concepts were found.")
-            self.workspace.save_state(state)
+            self._persist_state(state)
             return state
 
         state.teaching_mode = "review"
@@ -197,17 +203,48 @@ class LearningOrchestrator:
         state = self.instructor.run(state, self.workspace)
         state = self.practice.run(state, self.workspace)
         state.add_log("review_started", f"Started review for concepts: {', '.join(due_concepts)}.")
-        self.workspace.save_state(state)
-        self.workspace.write_checkpoint(state)
+        self._persist_state(state)
+        self._write_checkpoint(state)
         return state
 
     def run_turn(self, session_id: str, learner_answer: str) -> LearnerState:
-        state = self.workspace.load_state(session_id)
+        state = self._load_state(session_id)
         result = self.graph.invoke({"state": state, "learner_answer": learner_answer})
         updated = result["state"]
-        self.workspace.save_state(updated)
-        self.workspace.write_checkpoint(updated)
+        self._persist_state(updated)
+        self._write_checkpoint(updated)
         return updated
+
+    def _build_session_store(self, workspace_root: Path, config: AppConfig | None) -> SQLiteSessionStore | None:
+        if config is None or config.storage.backend != "sqlite":
+            return None
+        sqlite_path = Path(config.storage.sqlite_path) if config.storage.sqlite_path else workspace_root / "sessions.db"
+        return SQLiteSessionStore(sqlite_path)
+
+    def _load_state(self, session_id: str) -> LearnerState:
+        if self.session_store is not None:
+            return self.session_store.load_state(session_id)
+        return self.workspace.load_state(session_id)
+
+    def _persist_state(self, state: LearnerState) -> None:
+        self.workspace.save_state(state)
+        if self.session_store is not None:
+            self.session_store.save_state(state)
+
+    def _write_checkpoint(self, state: LearnerState) -> None:
+        self.workspace.write_checkpoint(state)
+        if self.session_store is not None:
+            self.session_store.write_checkpoint(state)
+
+    def _list_session_ids(self) -> list[str]:
+        if self.session_store is not None:
+            return self.session_store.list_session_ids()
+        return self.workspace.list_session_ids()
+
+    def _load_checkpoint(self, session_id: str, checkpoint_id: str) -> LearnerState:
+        if self.session_store is not None:
+            return self.session_store.load_checkpoint(session_id, checkpoint_id)
+        return self.workspace.load_checkpoint(session_id, checkpoint_id)
 
     def _build_graph(self):
         graph = StateGraph(GraphState)

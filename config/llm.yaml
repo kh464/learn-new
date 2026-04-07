@@ -50,3 +50,21 @@ llm:
   #       reasoning: gpt-4.1
   #       fast: gpt-4.1-mini
   #       embedding: text-embedding-3-large
+
+storage:
+  backend: file
+  sqlite_path: .learn/sessions.db
+
+security:
+  enabled: false
+  api_key_header: X-Admin-Key
+  api_key: ${LEARN_NEW_ADMIN_KEY}
+
+rate_limit:
+  enabled: false
+  requests: 120
+  window_seconds: 60
+
+observability:
+  metrics_enabled: true
+  request_id_header: X-Request-ID

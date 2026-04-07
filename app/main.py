@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from time import perf_counter
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from app.dashboard import render_dashboard
 from app.api.schemas import (
@@ -22,6 +24,7 @@ from app.api.schemas import (
 from app.config import AppConfig, load_config
 from app.knowledge import KnowledgeService
 from app.orchestrator import LearningOrchestrator
+from app.runtime_ops import InMemoryRateLimiter, MetricsRegistry
 
 
 def create_app(
@@ -31,13 +34,54 @@ def create_app(
     app = FastAPI(title="Learn New MVP", version="0.1.0")
     config = load_config(config_path)
     orchestrator = LearningOrchestrator(workspace_root=Path(workspace_root), config=config)
+    metrics = MetricsRegistry()
+    rate_limiter = (
+        InMemoryRateLimiter(
+            requests=config.rate_limit.requests,
+            window_seconds=config.rate_limit.window_seconds,
+        )
+        if config.rate_limit.enabled
+        else None
+    )
 
     app.state.orchestrator = orchestrator
     app.state.config = config
+    app.state.metrics = metrics
+
+    @app.middleware("http")
+    async def production_guards(request: Request, call_next):
+        request_id = uuid4().hex
+        started = perf_counter()
+        request_id_header = config.observability.request_id_header
+
+        def finalize(response):
+            latency_ms = (perf_counter() - started) * 1000
+            response.headers[request_id_header] = request_id
+            metrics.record(response.status_code, latency_ms)
+            return response
+
+        protected = request.url.path != "/health"
+        if config.security.enabled and protected:
+            provided = request.headers.get(config.security.api_key_header)
+            if not config.security.api_key or provided != config.security.api_key:
+                return finalize(JSONResponse(status_code=401, content={"detail": "Unauthorized"}))
+
+        if rate_limiter is not None and request.url.path not in {"/health", "/metrics"}:
+            client_host = request.client.host if request.client else "unknown"
+            if not rate_limiter.allow(client_host):
+                return finalize(JSONResponse(status_code=429, content={"detail": "Too Many Requests"}))
+
+        response = await call_next(request)
+        return finalize(response)
 
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    if config.observability.metrics_enabled:
+        @app.get("/metrics")
+        def get_metrics() -> PlainTextResponse:
+            return PlainTextResponse(metrics.render_prometheus())
 
     @app.get("/dashboard")
     def dashboard() -> HTMLResponse:
