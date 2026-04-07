@@ -206,17 +206,18 @@ Enable background turn execution:
 ```yaml
 tasks:
   enabled: true
-  backend: sqlite
+  backend: postgres
   worker_threads: 1
   max_queue_size: 100
   max_attempts: 3
-  sqlite_path: .learn/tasks.db
+  postgres_dsn: ${LEARN_NEW_POSTGRES_DSN}
 ```
 
 `POST /api/tasks/turns` enqueues a turn job, and `GET /api/tasks/{task_id}` returns queued/running/completed/failed status plus the final session state when complete.
 `WS /ws/tasks/{task_id}` streams live task status updates for the same task record.
 Task visibility follows the same owner isolation rules as session access.
 With `backend=sqlite`, task metadata and final results persist across restarts.
+With `backend=postgres`, the queue state is shared through PostgreSQL and can reuse `storage.postgres_dsn` when `tasks.postgres_dsn` is omitted.
 `tasks.max_attempts` controls how many times a failed background job is retried before it is marked failed permanently.
 
 ## External knowledge import

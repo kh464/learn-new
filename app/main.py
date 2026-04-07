@@ -37,7 +37,7 @@ from app.knowledge import KnowledgeService
 from app.orchestrator import LearningOrchestrator
 from app.runtime_health import RuntimeHealthService
 from app.runtime_ops import AppEventLogger, AuditLogger, InMemoryRateLimiter, MetricsRegistry, RedisRateLimiter
-from app.task_queue import InMemoryTaskQueue, SQLiteTaskQueue, TaskQueueFullError
+from app.task_queue import InMemoryTaskQueue, PostgresTaskQueue, SQLiteTaskQueue, TaskQueueFullError
 from app.web_fetch import WebKnowledgeFetcher
 
 
@@ -87,6 +87,11 @@ def create_app(
         if config.tasks.backend == "sqlite":
             task_queue = SQLiteTaskQueue(
                 path=Path(config.tasks.sqlite_path or Path(workspace_root) / "tasks.db"),
+                **task_queue_kwargs,
+            )
+        elif config.tasks.backend == "postgres":
+            task_queue = PostgresTaskQueue(
+                dsn=config.tasks.postgres_dsn or "",
                 **task_queue_kwargs,
             )
         else:

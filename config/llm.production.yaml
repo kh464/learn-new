@@ -84,8 +84,7 @@ knowledge:
 
 tasks:
   enabled: true
-  backend: sqlite
+  backend: postgres
   worker_threads: 1
   max_queue_size: 100
   max_attempts: 3
-  sqlite_path: .learn/tasks.db

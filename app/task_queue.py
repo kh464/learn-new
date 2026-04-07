@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -383,6 +384,215 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
                     record["max_attempts"],
                 ),
             )
+
+
+class PostgresTaskQueue(InMemoryTaskQueue):
+    placeholder = "%s"
+
+    def __init__(
+        self,
+        dsn: str,
+        worker_threads: int = 1,
+        max_queue_size: int = 100,
+        max_attempts: int = 1,
+        on_update: Callable[[dict], None] | None = None,
+        handlers: dict[str, TaskHandler] | None = None,
+        connect_factory: Callable[[str], object] | None = None,
+    ) -> None:
+        self.dsn = dsn
+        self.connect_factory = connect_factory or self._default_connect_factory()
+        super().__init__(
+            worker_threads=worker_threads,
+            max_queue_size=max_queue_size,
+            max_attempts=max_attempts,
+            on_update=on_update,
+            handlers=handlers,
+        )
+        self._initialize()
+        self._load_existing_tasks()
+
+    def _default_connect_factory(self) -> Callable[[str], object]:
+        try:
+            psycopg = importlib.import_module("psycopg")
+            return psycopg.connect
+        except ImportError:
+            psycopg2 = importlib.import_module("psycopg2")
+            return psycopg2.connect
+
+    @contextmanager
+    def _connect(self):
+        connection = self.connect_factory(self.dsn)
+        try:
+            yield connection
+            connection.commit()
+        finally:
+            connection.close()
+
+    def _query(self, sql: str) -> str:
+        return sql.replace("?", self.placeholder)
+
+    def _initialize(self) -> None:
+        with self._connect() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS task_queue (
+                    task_id TEXT PRIMARY KEY,
+                    task_type TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    owner_id TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    error TEXT,
+                    result_json TEXT,
+                    created_at TEXT NOT NULL,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    max_attempts INTEGER NOT NULL DEFAULT 1
+                )
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_task_queue_status_created_at ON task_queue(status, created_at)"
+            )
+            cursor.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'task_queue'
+                """
+            )
+            columns = {str(row[0]) for row in cursor.fetchall()}
+            if "attempt_count" not in columns:
+                cursor.execute("ALTER TABLE task_queue ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0")
+            if "max_attempts" not in columns:
+                cursor.execute("ALTER TABLE task_queue ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 1")
+            cursor.close()
+
+    def _load_existing_tasks(self) -> None:
+        with self._connect() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                SELECT task_id, task_type, session_id, owner_id, payload_json, status, error, result_json,
+                       created_at, started_at, completed_at, attempt_count, max_attempts
+                FROM task_queue
+                ORDER BY created_at ASC
+                """
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+        with self._lock:
+            for row in rows:
+                raw_status = row[5]
+                attempt_count = int(row[11] or 0)
+                max_attempts = int(row[12] or 1)
+                should_resume = raw_status in {"queued", "running"} and attempt_count < max_attempts
+                status = "queued" if should_resume else raw_status
+                if raw_status in {"queued", "running"} and not should_resume:
+                    status = "failed"
+                record = {
+                    "task_id": row[0],
+                    "task_type": row[1],
+                    "session_id": row[2],
+                    "owner_id": row[3],
+                    "payload": json.loads(row[4]),
+                    "status": status,
+                    "error": row[6] or ("Worker restarted before task completion." if raw_status in {"queued", "running"} else None),
+                    "result": json.loads(row[7]) if row[7] else None,
+                    "created_at": row[8],
+                    "started_at": row[9],
+                    "completed_at": None if should_resume else (row[10] or (_utc_iso() if raw_status in {"queued", "running"} else None)),
+                    "attempt_count": attempt_count,
+                    "max_attempts": max_attempts,
+                    "runner": None,
+                }
+                self._tasks[record["task_id"]] = record
+                self._persist_record(record)
+                if should_resume:
+                    self._queue.put({"task_id": record["task_id"]})
+
+    def submit(
+        self,
+        *,
+        task_type: str,
+        session_id: str,
+        owner_id: str,
+        payload: dict | None = None,
+        runner: Callable[[], dict] | None = None,
+    ) -> dict:
+        task = super().submit(
+            task_type=task_type,
+            session_id=session_id,
+            owner_id=owner_id,
+            payload=payload,
+            runner=runner,
+        )
+        with self._lock:
+            self._persist_record(self._tasks[task["task_id"]])
+        return task
+
+    def snapshot(self) -> dict:
+        payload = super().snapshot()
+        payload["backend"] = "postgres"
+        payload["postgres_dsn_configured"] = bool(self.dsn)
+        return payload
+
+    def _execute(self, record: dict) -> dict:
+        result = super()._execute(record)
+        with self._lock:
+            self._persist_record(record)
+        return result
+
+    def _emit(self, record: dict) -> None:
+        with self._lock:
+            source = self._tasks.get(record["task_id"])
+            if source is not None:
+                self._persist_record(source)
+        super()._emit(record)
+
+    def _persist_record(self, record: dict) -> None:
+        with self._connect() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                self._query(
+                    """
+                    INSERT INTO task_queue (
+                        task_id, task_type, session_id, owner_id, payload_json, status, error, result_json,
+                        created_at, started_at, completed_at, attempt_count, max_attempts
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(task_id) DO UPDATE SET
+                        task_type = excluded.task_type,
+                        session_id = excluded.session_id,
+                        owner_id = excluded.owner_id,
+                        payload_json = excluded.payload_json,
+                        status = excluded.status,
+                        error = excluded.error,
+                        result_json = excluded.result_json,
+                        started_at = excluded.started_at,
+                        completed_at = excluded.completed_at,
+                        attempt_count = excluded.attempt_count,
+                        max_attempts = excluded.max_attempts
+                    """
+                ),
+                (
+                    record["task_id"],
+                    record["task_type"],
+                    record["session_id"],
+                    record["owner_id"],
+                    json.dumps(record["payload"], ensure_ascii=False),
+                    record["status"],
+                    record["error"],
+                    json.dumps(record["result"], ensure_ascii=False) if record["result"] is not None else None,
+                    record["created_at"],
+                    record["started_at"],
+                    record["completed_at"],
+                    record["attempt_count"],
+                    record["max_attempts"],
+                ),
+            )
+            cursor.close()
 
 
 def _utc_iso() -> str:

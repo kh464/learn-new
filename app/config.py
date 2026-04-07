@@ -137,14 +137,24 @@ class AppConfig(BaseModel):
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
     tasks: "TaskQueueSettings" = Field(default_factory=lambda: TaskQueueSettings())
 
+    @model_validator(mode="after")
+    def validate_cross_field_settings(self) -> "AppConfig":
+        if self.tasks.backend == "postgres":
+            if not self.tasks.postgres_dsn and self.storage.backend == "postgres":
+                self.tasks.postgres_dsn = self.storage.postgres_dsn
+            if not self.tasks.postgres_dsn:
+                raise ValueError("tasks.postgres_dsn is required when tasks.backend=postgres")
+        return self
+
 
 class TaskQueueSettings(BaseModel):
     enabled: bool = True
-    backend: Literal["memory", "sqlite"] = "memory"
+    backend: Literal["memory", "sqlite", "postgres"] = "memory"
     worker_threads: int = 1
     max_queue_size: int = 100
     max_attempts: int = 1
     sqlite_path: str | None = None
+    postgres_dsn: str | None = None
 
     @model_validator(mode="after")
     def validate_queue_settings(self) -> "TaskQueueSettings":
