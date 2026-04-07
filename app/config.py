@@ -86,6 +86,7 @@ class ObservabilitySettings(BaseModel):
     metrics_enabled: bool = True
     request_id_header: str = "X-Request-ID"
     audit_log_path: str | None = ".learn/audit/events.jsonl"
+    app_log_path: str | None = ".learn/logs/app.jsonl"
 
 
 class SandboxSettings(BaseModel):

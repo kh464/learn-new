@@ -28,7 +28,7 @@ from app.config import AppConfig, load_config
 from app.knowledge import KnowledgeService
 from app.orchestrator import LearningOrchestrator
 from app.runtime_health import RuntimeHealthService
-from app.runtime_ops import AuditLogger, InMemoryRateLimiter, MetricsRegistry, RedisRateLimiter
+from app.runtime_ops import AppEventLogger, AuditLogger, InMemoryRateLimiter, MetricsRegistry, RedisRateLimiter
 
 
 def create_app(
@@ -41,6 +41,7 @@ def create_app(
     metrics = MetricsRegistry()
     runtime_health = RuntimeHealthService(config=config, workspace_root=Path(workspace_root))
     audit_logger = AuditLogger(Path(config.observability.audit_log_path)) if config.observability.audit_log_path else None
+    app_logger = AppEventLogger(Path(config.observability.app_log_path)) if config.observability.app_log_path else None
     rate_limiter = None
     if config.rate_limit.enabled:
         if config.rate_limit.backend == "redis":
@@ -63,6 +64,7 @@ def create_app(
     app.state.config = config
     app.state.metrics = metrics
     app.state.audit_logger = audit_logger
+    app.state.app_logger = app_logger
     app.state.runtime_health = runtime_health
 
     role_levels = {"viewer": 1, "operator": 2, "admin": 3}
@@ -107,6 +109,7 @@ def create_app(
         request_id_header = config.observability.request_id_header
         principal_name = "anonymous"
         principal_role = "anonymous"
+        request.state.request_id = request_id
         request.state.principal_name = principal_name
         request.state.principal_role = principal_role
 
@@ -148,7 +151,25 @@ def create_app(
                 response.headers["Retry-After"] = str(config.rate_limit.window_seconds)
                 return finalize(response)
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            if app_logger is not None:
+                app_logger.append(
+                    {
+                        "event": "unhandled_exception",
+                        "request_id": request_id,
+                        "method": request.method,
+                        "path": request.url.path,
+                        "principal": principal_name,
+                        "role": principal_role,
+                        "error": repr(exc),
+                    }
+                )
+            response = JSONResponse(
+                status_code=500,
+                content={"detail": "Internal Server Error", "request_id": request_id},
+            )
         return finalize(response)
 
     @app.get("/health")

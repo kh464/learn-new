@@ -115,3 +115,7 @@ class AuditLogger:
             lines = self.path.read_text(encoding="utf-8").splitlines()
         items = [json.loads(line) for line in lines if line.strip()]
         return items[-limit:][::-1]
+
+
+class AppEventLogger(AuditLogger):
+    pass
