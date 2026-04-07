@@ -143,6 +143,8 @@ class TaskAcceptedResponse(BaseModel):
     session_id: str
     status: str
     created_at: str
+    attempt_count: int = 0
+    max_attempts: int = 1
 
 
 class TaskStatusResponse(BaseModel):
@@ -154,4 +156,6 @@ class TaskStatusResponse(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     error: str | None = None
+    attempt_count: int = 0
+    max_attempts: int = 1
     result: StateResponse | None = None

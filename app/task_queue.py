@@ -24,10 +24,12 @@ class InMemoryTaskQueue:
         self,
         worker_threads: int = 1,
         max_queue_size: int = 100,
+        max_attempts: int = 1,
         on_update: Callable[[dict], None] | None = None,
         handlers: dict[str, TaskHandler] | None = None,
     ) -> None:
         self.worker_threads = worker_threads
+        self.max_attempts = max_attempts
         self.on_update = on_update
         self.handlers = handlers or {}
         self._queue: Queue[dict] = Queue(maxsize=max_queue_size)
@@ -73,6 +75,8 @@ class InMemoryTaskQueue:
             "created_at": _utc_iso(),
             "started_at": None,
             "completed_at": None,
+            "attempt_count": 0,
+            "max_attempts": self.max_attempts,
             "runner": runner,
         }
         with self._lock:
@@ -143,6 +147,7 @@ class InMemoryTaskQueue:
                     self._queue.task_done()
                     continue
                 record["status"] = "running"
+                record["attempt_count"] += 1
                 record["started_at"] = _utc_iso()
                 public = self._public_record(record)
             self._emit(public)
@@ -155,10 +160,16 @@ class InMemoryTaskQueue:
                     public = self._public_record(record)
             except Exception as exc:
                 with self._lock:
-                    record["status"] = "failed"
                     record["error"] = repr(exc)
-                    record["completed_at"] = _utc_iso()
-                    public = self._public_record(record)
+                    if record["attempt_count"] < record["max_attempts"]:
+                        record["status"] = "queued"
+                        record["completed_at"] = None
+                        public = self._public_record(record)
+                        self._queue.put({"task_id": task_id})
+                    else:
+                        record["status"] = "failed"
+                        record["completed_at"] = _utc_iso()
+                        public = self._public_record(record)
             finally:
                 self._emit(public)
                 self._queue.task_done()
@@ -183,6 +194,8 @@ class InMemoryTaskQueue:
             "created_at": record["created_at"],
             "started_at": record["started_at"],
             "completed_at": record["completed_at"],
+            "attempt_count": record["attempt_count"],
+            "max_attempts": record["max_attempts"],
         }
 
     def _emit(self, record: dict) -> None:
@@ -196,6 +209,7 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
         path: Path | str,
         worker_threads: int = 1,
         max_queue_size: int = 100,
+        max_attempts: int = 1,
         on_update: Callable[[dict], None] | None = None,
         handlers: dict[str, TaskHandler] | None = None,
     ) -> None:
@@ -204,6 +218,7 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
         super().__init__(
             worker_threads=worker_threads,
             max_queue_size=max_queue_size,
+            max_attempts=max_attempts,
             on_update=on_update,
             handlers=handlers,
         )
@@ -234,28 +249,42 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
                     result_json TEXT,
                     created_at TEXT NOT NULL,
                     started_at TEXT,
-                    completed_at TEXT
+                    completed_at TEXT,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    max_attempts INTEGER NOT NULL DEFAULT 1
                 )
                 """
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_task_queue_status_created_at ON task_queue(status, created_at)"
             )
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(task_queue)").fetchall()
+            }
+            if "attempt_count" not in columns:
+                connection.execute("ALTER TABLE task_queue ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0")
+            if "max_attempts" not in columns:
+                connection.execute("ALTER TABLE task_queue ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 1")
 
     def _load_existing_tasks(self) -> None:
         with self._connect() as connection:
             rows = connection.execute(
                 """
                 SELECT task_id, task_type, session_id, owner_id, payload_json, status, error, result_json,
-                       created_at, started_at, completed_at
+                       created_at, started_at, completed_at, attempt_count, max_attempts
                 FROM task_queue
                 ORDER BY created_at ASC
                 """
             ).fetchall()
         with self._lock:
             for row in rows:
-                status = row[5]
-                if status in {"queued", "running"}:
+                raw_status = row[5]
+                attempt_count = int(row[11] or 0)
+                max_attempts = int(row[12] or 1)
+                should_resume = raw_status in {"queued", "running"} and attempt_count < max_attempts
+                status = "queued" if should_resume else raw_status
+                if raw_status in {"queued", "running"} and not should_resume:
                     status = "failed"
                 record = {
                     "task_id": row[0],
@@ -264,15 +293,19 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
                     "owner_id": row[3],
                     "payload": json.loads(row[4]),
                     "status": status,
-                    "error": row[6] or ("Worker restarted before task completion." if row[5] in {"queued", "running"} else None),
+                    "error": row[6] or ("Worker restarted before task completion." if raw_status in {"queued", "running"} else None),
                     "result": json.loads(row[7]) if row[7] else None,
                     "created_at": row[8],
                     "started_at": row[9],
-                    "completed_at": row[10] or (_utc_iso() if row[5] in {"queued", "running"} else None),
+                    "completed_at": None if should_resume else (row[10] or (_utc_iso() if raw_status in {"queued", "running"} else None)),
+                    "attempt_count": attempt_count,
+                    "max_attempts": max_attempts,
                     "runner": None,
                 }
                 self._tasks[record["task_id"]] = record
                 self._persist_record(record)
+                if should_resume:
+                    self._queue.put({"task_id": record["task_id"]})
 
     def submit(
         self,
@@ -319,8 +352,8 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
                 """
                 INSERT INTO task_queue (
                     task_id, task_type, session_id, owner_id, payload_json, status, error, result_json,
-                    created_at, started_at, completed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, started_at, completed_at, attempt_count, max_attempts
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(task_id) DO UPDATE SET
                     task_type = excluded.task_type,
                     session_id = excluded.session_id,
@@ -330,7 +363,9 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
                     error = excluded.error,
                     result_json = excluded.result_json,
                     started_at = excluded.started_at,
-                    completed_at = excluded.completed_at
+                    completed_at = excluded.completed_at,
+                    attempt_count = excluded.attempt_count,
+                    max_attempts = excluded.max_attempts
                 """,
                 (
                     record["task_id"],
@@ -344,6 +379,8 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
                     record["created_at"],
                     record["started_at"],
                     record["completed_at"],
+                    record["attempt_count"],
+                    record["max_attempts"],
                 ),
             )
 

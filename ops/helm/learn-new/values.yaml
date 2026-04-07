@@ -5,6 +5,18 @@ image:
   tag: local
   pullPolicy: IfNotPresent
 
+podAnnotations: {}
+
+podSecurityContext: {}
+
+containerSecurityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
 service:
   type: ClusterIP
   port: 80
@@ -16,7 +28,47 @@ ingress:
   host: learn-new.local
   path: /
 
-resources: {}
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  minAvailable: 1
 
 env:
   LEARN_NEW_CONFIG_PATH: /app/config/llm.production.yaml
+  LEARN_NEW_SECRET_DIR: /app/secrets
+
+secret:
+  create: true
+  name: ""
+  data: {}
+
+secretMount:
+  enabled: true
+  mountPath: /app/secrets
+
+livenessProbe:
+  path: /health
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+readinessProbe:
+  path: /health/ready
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

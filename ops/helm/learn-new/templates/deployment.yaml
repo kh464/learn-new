@@ -11,13 +11,57 @@ spec:
     metadata:
       labels:
         app: {{ .Release.Name }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
-          env:
-            - name: LEARN_NEW_CONFIG_PATH
-              value: {{ .Values.env.LEARN_NEW_CONFIG_PATH | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            {{- if or .Values.secret.create .Values.secret.name }}
+            - secretRef:
+                name: {{ default (printf "%s-secrets" .Release.Name) .Values.secret.name }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: {{ .Values.service.targetPort }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: {{ .Values.service.targetPort }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.secretMount.enabled }}
+          volumeMounts:
+            - name: app-secrets
+              mountPath: {{ .Values.secretMount.mountPath }}
+              readOnly: true
+          {{- end }}
+      {{- if .Values.secretMount.enabled }}
+      volumes:
+        - name: app-secrets
+          secret:
+            secretName: {{ default (printf "%s-secrets" .Release.Name) .Values.secret.name }}
+      {{- end }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}

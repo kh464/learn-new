@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+data:
+  LEARN_NEW_CONFIG_PATH: {{ .Values.env.LEARN_NEW_CONFIG_PATH | quote }}
+  LEARN_NEW_SECRET_DIR: {{ .Values.env.LEARN_NEW_SECRET_DIR | quote }}

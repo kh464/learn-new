@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from html import unescape
+from urllib import parse
 from urllib import request
 
 
@@ -11,6 +12,9 @@ class WebKnowledgeFetcher:
         self.user_agent = user_agent
 
     def fetch(self, url: str) -> dict[str, str]:
+        parsed = parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("Only http and https URLs are supported")
         req = request.Request(
             url,
             headers={"User-Agent": self.user_agent},

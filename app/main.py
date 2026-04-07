@@ -80,6 +80,7 @@ def create_app(
         task_queue_kwargs = {
             "worker_threads": config.tasks.worker_threads,
             "max_queue_size": config.tasks.max_queue_size,
+            "max_attempts": config.tasks.max_attempts,
             "on_update": lambda record: event_broker.publish(f"task:{record['task_id']}", record),
             "handlers": task_handlers,
         }
@@ -359,7 +360,12 @@ def create_app(
             raise HTTPException(status_code=404, detail="Session not found") from exc
         if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
             raise HTTPException(status_code=404, detail="Session not found")
-        fetched = app.state.web_fetcher(payload.url)
+        try:
+            fetched = app.state.web_fetcher(payload.url)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         service = KnowledgeService(app.state.orchestrator.workspace)
         chunks = service.ingest_text(
             session_id=session_id,

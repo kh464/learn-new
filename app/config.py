@@ -143,6 +143,7 @@ class TaskQueueSettings(BaseModel):
     backend: Literal["memory", "sqlite"] = "memory"
     worker_threads: int = 1
     max_queue_size: int = 100
+    max_attempts: int = 1
     sqlite_path: str | None = None
 
     @model_validator(mode="after")
@@ -151,6 +152,8 @@ class TaskQueueSettings(BaseModel):
             raise ValueError("tasks.worker_threads must be at least 1")
         if self.max_queue_size < 1:
             raise ValueError("tasks.max_queue_size must be at least 1")
+        if self.max_attempts < 1:
+            raise ValueError("tasks.max_attempts must be at least 1")
         if self.backend == "sqlite" and not self.sqlite_path:
             self.sqlite_path = ".learn/tasks.db"
         return self

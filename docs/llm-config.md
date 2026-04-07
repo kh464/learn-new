@@ -209,6 +209,7 @@ tasks:
   backend: sqlite
   worker_threads: 1
   max_queue_size: 100
+  max_attempts: 3
   sqlite_path: .learn/tasks.db
 ```
 
@@ -216,10 +217,13 @@ tasks:
 `WS /ws/tasks/{task_id}` streams live task status updates for the same task record.
 Task visibility follows the same owner isolation rules as session access.
 With `backend=sqlite`, task metadata and final results persist across restarts.
+`tasks.max_attempts` controls how many times a failed background job is retried before it is marked failed permanently.
 
 ## External knowledge import
 
 `POST /api/sessions/{session_id}/knowledge/import-url` fetches remote page content, extracts readable text, and ingests it into the session knowledge index.
+Only `http` and `https` URLs are accepted.
+Imports are idempotent per `source + content` fingerprint, so retrying the same URL does not duplicate stored chunks.
 
 ## Observability stack
 
@@ -234,6 +238,8 @@ The repository also includes:
 - `docker-compose.edge.yml` with a Caddy reverse proxy
 - `ops/k8s/` with starter `Deployment`, `Service`, and `Ingress` manifests
 - `ops/helm/learn-new/` with a starter Helm chart
+
+The Helm chart includes parameterized `Deployment`, `Service`, `Ingress`, `ConfigMap`, `Secret`, `HorizontalPodAutoscaler`, and `PodDisruptionBudget` templates, plus probe/resource/securityContext settings in `values.yaml`.
 
 ## Sandbox backend
 

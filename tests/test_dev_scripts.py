@@ -61,9 +61,17 @@ def test_helm_chart_templates_exist() -> None:
     deployment = Path("ops/helm/learn-new/templates/deployment.yaml").read_text(encoding="utf-8")
     service = Path("ops/helm/learn-new/templates/service.yaml").read_text(encoding="utf-8")
     ingress = Path("ops/helm/learn-new/templates/ingress.yaml").read_text(encoding="utf-8")
+    hpa = Path("ops/helm/learn-new/templates/hpa.yaml").read_text(encoding="utf-8")
+    pdb = Path("ops/helm/learn-new/templates/pdb.yaml").read_text(encoding="utf-8")
+    configmap = Path("ops/helm/learn-new/templates/configmap.yaml").read_text(encoding="utf-8")
+    secret = Path("ops/helm/learn-new/templates/secret.yaml").read_text(encoding="utf-8")
 
     assert "apiVersion: v2" in chart
     assert "image:" in values
     assert ".Values.image.repository" in deployment
     assert "kind: Service" in service
     assert "kind: Ingress" in ingress
+    assert "kind: HorizontalPodAutoscaler" in hpa
+    assert "kind: PodDisruptionBudget" in pdb
+    assert "kind: ConfigMap" in configmap
+    assert "kind: Secret" in secret

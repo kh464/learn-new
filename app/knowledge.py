@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from pathlib import Path
 from uuid import uuid4
@@ -13,9 +15,31 @@ class KnowledgeService:
         self.manager = manager
 
     def ingest_text(self, session_id: str, title: str, content: str, source: str) -> list[KnowledgeChunk]:
-        upload_path = self.manager.session_root(session_id) / "user_uploads" / f"{title}.txt"
+        normalized_content = content.strip()
+        fingerprint = hashlib.sha256(f"{source}\n{normalized_content}".encode("utf-8")).hexdigest()
+        session_root = self.manager.session_root(session_id)
+        raw_dir = session_root / "knowledge" / "raw"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        marker_path = raw_dir / f"{fingerprint}.json"
+        if marker_path.exists():
+            return []
+
+        upload_path = session_root / "user_uploads" / f"{title}.txt"
         upload_path.parent.mkdir(parents=True, exist_ok=True)
-        upload_path.write_text(content, encoding="utf-8")
+        upload_path.write_text(normalized_content, encoding="utf-8")
+        marker_path.write_text(
+            json.dumps(
+                {
+                    "title": title,
+                    "source": source,
+                    "fingerprint": fingerprint,
+                    "path": upload_path.as_posix(),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
         chunks = [
             KnowledgeChunk(
@@ -25,7 +49,7 @@ class KnowledgeService:
                 source=source,
                 tags=self._extract_tags(part),
             )
-            for part in self._chunk_text(content)
+            for part in self._chunk_text(normalized_content)
             if part.strip()
         ]
         self.manager.append_knowledge_chunks(session_id, chunks)
