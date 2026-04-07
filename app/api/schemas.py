@@ -36,6 +36,10 @@ class UploadKnowledgeRequest(BaseModel):
     source: str = "user://upload"
 
 
+class ImportKnowledgeUrlRequest(BaseModel):
+    url: str
+
+
 class UploadKnowledgeResponse(BaseModel):
     session_id: str
     chunks_added: int

@@ -10,7 +10,7 @@ llm:
     siliconflow:
       enabled: true
       base_url: https://api.siliconflow.cn/v1
-      api_key: ${SILICONFLOW_API_KEY}
+      api_key: ${secret:siliconflow_api_key}
       models:
         chat: Qwen/Qwen2.5-32B-Instruct
         reasoning: deepseek-ai/DeepSeek-R1
@@ -40,16 +40,16 @@ storage:
 security:
   enabled: true
   api_key_header: X-Admin-Key
-  api_key: ${LEARN_NEW_ADMIN_KEY}
+  api_key: ${secret:learn_new_admin_key}
   principals:
     - name: viewer
-      api_key: ${LEARN_NEW_VIEWER_KEY}
+      api_key: ${secret:learn_new_viewer_key}
       role: viewer
     - name: operator
-      api_key: ${LEARN_NEW_OPERATOR_KEY}
+      api_key: ${secret:learn_new_operator_key}
       role: operator
     - name: admin
-      api_key: ${LEARN_NEW_ADMIN_KEY}
+      api_key: ${secret:learn_new_admin_key}
       role: admin
 
 rate_limit:
@@ -84,6 +84,7 @@ knowledge:
 
 tasks:
   enabled: true
-  backend: memory
+  backend: sqlite
   worker_threads: 1
   max_queue_size: 100
+  sqlite_path: .learn/tasks.db

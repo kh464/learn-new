@@ -53,3 +53,17 @@ def test_edge_and_cluster_templates_exist() -> None:
     assert "kind: Deployment" in deployment
     assert "kind: Service" in service
     assert "kind: Ingress" in ingress
+
+
+def test_helm_chart_templates_exist() -> None:
+    chart = Path("ops/helm/learn-new/Chart.yaml").read_text(encoding="utf-8")
+    values = Path("ops/helm/learn-new/values.yaml").read_text(encoding="utf-8")
+    deployment = Path("ops/helm/learn-new/templates/deployment.yaml").read_text(encoding="utf-8")
+    service = Path("ops/helm/learn-new/templates/service.yaml").read_text(encoding="utf-8")
+    ingress = Path("ops/helm/learn-new/templates/ingress.yaml").read_text(encoding="utf-8")
+
+    assert "apiVersion: v2" in chart
+    assert "image:" in values
+    assert ".Values.image.repository" in deployment
+    assert "kind: Service" in service
+    assert "kind: Ingress" in ingress

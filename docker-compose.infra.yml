@@ -6,6 +6,7 @@ services:
       - alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
       LEARN_NEW_CONFIG_PATH: /app/config/llm.production.yaml
+      LEARN_NEW_SECRET_DIR: /run/secrets/learn-new
       LEARN_NEW_POSTGRES_DSN: postgresql://learn_new:learn_new@postgres:5432/learn_new
       LEARN_NEW_REDIS_URL: redis://redis:6379/0
       LEARN_NEW_QDRANT_URL: http://qdrant:6333
@@ -18,6 +19,7 @@ services:
         condition: service_started
     volumes:
       - learn_new_workspace:/app/.learn
+      - ./secrets:/run/secrets/learn-new:ro
       - /var/run/docker.sock:/var/run/docker.sock
 
   postgres:

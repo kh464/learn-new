@@ -70,6 +70,12 @@ $env:SILICONFLOW_API_KEY="你的真实key"
 $env:LEARN_NEW_CONFIG_PATH="config/llm.production.yaml"
 ```
 
+如果使用挂载式 secrets：
+
+```powershell
+$env:LEARN_NEW_SECRET_DIR="D:\\path\\to\\secrets"
+```
+
 容器方式启动：
 
 ```powershell
@@ -138,6 +144,7 @@ http://127.0.0.1:8000/dashboard
 - `POST /api/sessions/{session_id}/checkpoints/{checkpoint_id}/restore`
 - `GET /api/sessions/{session_id}/export`
 - `POST /api/sessions/{session_id}/knowledge`
+- `POST /api/sessions/{session_id}/knowledge/import-url`
 - `GET /api/sessions/{session_id}/knowledge/search`
 - `GET /api/sessions/{session_id}/reviews/due`
 - `POST /api/sessions/{session_id}/reviews`
@@ -150,6 +157,7 @@ http://127.0.0.1:8000/dashboard
 `GET /api/logs/app` 可供 admin 拉取最近结构化应用日志。
 `POST /api/tasks/turns` 可把一轮教学推进提交到后台 worker；随后用 `GET /api/tasks/{task_id}` 轮询状态和结果。
 `WS /ws/tasks/{task_id}` 可流式接收后台任务的状态变化。
+`POST /api/sessions/{session_id}/knowledge/import-url` 可抓取外部 URL 文本并直接入库到当前 session 知识索引。
 
 如果启用了 `security.enabled=true`，除 `GET /health`、`GET /health/ready`、`GET /dashboard` 之外的接口都需要携带 `X-Admin-Key`。
 可以继续使用单个共享 key，也可以配置 `viewer / operator / admin` 三类 token。
@@ -340,10 +348,12 @@ docker build -t learn-new:local .
 - 容器模板已补充 healthcheck、只读根文件系统、`no-new-privileges`、`cap_drop=ALL`、`tmpfs` 与 `pids_limit`
 - 已补充 Alembic 迁移目录、首个 PostgreSQL schema migration、`scripts/migrate.ps1`，以及容器启动前自动 `alembic upgrade head`
 - 已补充内存型异步 task queue 和后台 worker，可把 turn 执行从请求线程移到后台并按 owner 隔离任务查询
+- 已补充可切换的 SQLite 持久化任务队列后端，任务状态可跨进程重启保留
 - 已补充任务状态 WebSocket 推送接口，后台任务可流式返回状态变化
 - 已补充 `docker-compose.observability.yml`、Prometheus 抓取配置和 Grafana datasource provisioning
 - 已补充 trace id 透传和 Prometheus alert rules 模板
 - 已补充 Caddy 反向代理模板和 K8s deployment/service/ingress 清单
+- 已补充 URL 抓取式外部知识导入，以及 Helm chart 模板
 - 已补充基础备份与恢复脚本，带 manifest 校验与显式 `-Force` 护栏，便于单节点灾备和本地恢复
 
 后续扩展优先级建议：

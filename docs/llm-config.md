@@ -2,6 +2,7 @@
 
 The project uses `config/llm.yaml` as the runtime configuration file.
 You can override the runtime file with `LEARN_NEW_CONFIG_PATH`.
+Mounted secret files can be resolved with `LEARN_NEW_SECRET_DIR`.
 
 ## Current default
 
@@ -67,6 +68,14 @@ $env:LEARN_NEW_OPERATOR_KEY="your_operator_key"
 $env:LEARN_NEW_POSTGRES_DSN="postgresql://learn_new:learn_new@localhost:5432/learn_new"
 $env:LEARN_NEW_REDIS_URL="redis://localhost:6379/0"
 $env:LEARN_NEW_QDRANT_URL="http://localhost:6333"
+$env:LEARN_NEW_SECRET_DIR="D:\path\to\secrets"
+```
+
+Secret reference examples:
+
+```yaml
+api_key: ${secret:siliconflow_api_key}
+postgres_dsn: ${file:/run/secrets/learn-new/postgres_dsn}
 ```
 
 ## Storage backend
@@ -197,14 +206,20 @@ Enable background turn execution:
 ```yaml
 tasks:
   enabled: true
-  backend: memory
+  backend: sqlite
   worker_threads: 1
   max_queue_size: 100
+  sqlite_path: .learn/tasks.db
 ```
 
 `POST /api/tasks/turns` enqueues a turn job, and `GET /api/tasks/{task_id}` returns queued/running/completed/failed status plus the final session state when complete.
 `WS /ws/tasks/{task_id}` streams live task status updates for the same task record.
 Task visibility follows the same owner isolation rules as session access.
+With `backend=sqlite`, task metadata and final results persist across restarts.
+
+## External knowledge import
+
+`POST /api/sessions/{session_id}/knowledge/import-url` fetches remote page content, extracts readable text, and ingests it into the session knowledge index.
 
 ## Observability stack
 
@@ -218,6 +233,7 @@ The repository also includes:
 
 - `docker-compose.edge.yml` with a Caddy reverse proxy
 - `ops/k8s/` with starter `Deployment`, `Service`, and `Ingress` manifests
+- `ops/helm/learn-new/` with a starter Helm chart
 
 ## Sandbox backend
 

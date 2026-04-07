@@ -18,6 +18,7 @@ from app.api.schemas import (
     CheckpointListResponse,
     CreateSessionRequest,
     DueReviewResponse,
+    ImportKnowledgeUrlRequest,
     SessionIndexResponse,
     SessionSummaryResponse,
     SearchKnowledgeResponse,
@@ -36,7 +37,8 @@ from app.knowledge import KnowledgeService
 from app.orchestrator import LearningOrchestrator
 from app.runtime_health import RuntimeHealthService
 from app.runtime_ops import AppEventLogger, AuditLogger, InMemoryRateLimiter, MetricsRegistry, RedisRateLimiter
-from app.task_queue import InMemoryTaskQueue, TaskQueueFullError
+from app.task_queue import InMemoryTaskQueue, SQLiteTaskQueue, TaskQueueFullError
+from app.web_fetch import WebKnowledgeFetcher
 
 
 def create_app(
@@ -48,6 +50,7 @@ def create_app(
     metrics = MetricsRegistry()
     runtime_health = RuntimeHealthService(config=config, workspace_root=Path(workspace_root))
     event_broker = EventBroker()
+    web_fetcher = WebKnowledgeFetcher()
     audit_logger = (
         AuditLogger(
             Path(config.observability.audit_log_path),
@@ -64,15 +67,29 @@ def create_app(
         if config.observability.app_log_path
         else None
     )
-    task_queue = (
-        InMemoryTaskQueue(
-            worker_threads=config.tasks.worker_threads,
-            max_queue_size=config.tasks.max_queue_size,
-            on_update=lambda record: event_broker.publish(f"task:{record['task_id']}", record),
-        )
-        if config.tasks.enabled
-        else None
-    )
+    task_handlers = {
+        "turn": lambda payload: StateResponse.from_state(
+            orchestrator.run_turn(
+                session_id=payload["session_id"],
+                learner_answer=payload["learner_answer"],
+            )
+        ).model_dump(mode="json")
+    }
+    task_queue = None
+    if config.tasks.enabled:
+        task_queue_kwargs = {
+            "worker_threads": config.tasks.worker_threads,
+            "max_queue_size": config.tasks.max_queue_size,
+            "on_update": lambda record: event_broker.publish(f"task:{record['task_id']}", record),
+            "handlers": task_handlers,
+        }
+        if config.tasks.backend == "sqlite":
+            task_queue = SQLiteTaskQueue(
+                path=Path(config.tasks.sqlite_path or Path(workspace_root) / "tasks.db"),
+                **task_queue_kwargs,
+            )
+        else:
+            task_queue = InMemoryTaskQueue(**task_queue_kwargs)
     rate_limiter = None
     if config.rate_limit.enabled:
         if config.rate_limit.backend == "redis":
@@ -112,6 +129,7 @@ def create_app(
     app.state.runtime_health = runtime_health
     app.state.task_queue = task_queue
     app.state.event_broker = event_broker
+    app.state.web_fetcher = web_fetcher.fetch
 
     role_levels = {"viewer": 1, "operator": 2, "admin": 3}
 
@@ -329,6 +347,28 @@ def create_app(
         )
         return UploadKnowledgeResponse(session_id=session_id, chunks_added=len(chunks))
 
+    @app.post("/api/sessions/{session_id}/knowledge/import-url", response_model=UploadKnowledgeResponse, status_code=201)
+    def import_knowledge_from_url(
+        session_id: str,
+        payload: ImportKnowledgeUrlRequest,
+        request: Request,
+    ) -> UploadKnowledgeResponse:
+        try:
+            state = app.state.orchestrator.get_state(session_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Session not found") from exc
+        if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+        fetched = app.state.web_fetcher(payload.url)
+        service = KnowledgeService(app.state.orchestrator.workspace)
+        chunks = service.ingest_text(
+            session_id=session_id,
+            title=fetched["title"],
+            content=fetched["content"],
+            source=fetched["source"],
+        )
+        return UploadKnowledgeResponse(session_id=session_id, chunks_added=len(chunks))
+
     @app.get("/api/sessions/{session_id}/knowledge/search", response_model=SearchKnowledgeResponse)
     def search_knowledge(session_id: str, request: Request, query: str, limit: int = 3) -> SearchKnowledgeResponse:
         try:
@@ -380,12 +420,10 @@ def create_app(
                 task_type="turn",
                 session_id=payload.session_id,
                 owner_id=state.owner_id or request.state.principal_name,
-                runner=lambda: StateResponse.from_state(
-                    app.state.orchestrator.run_turn(
-                        session_id=payload.session_id,
-                        learner_answer=payload.learner_answer,
-                    )
-                ).model_dump(mode="json"),
+                payload={
+                    "session_id": payload.session_id,
+                    "learner_answer": payload.learner_answer,
+                },
             )
         except TaskQueueFullError as exc:
             raise HTTPException(status_code=503, detail="Task queue full") from exc

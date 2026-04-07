@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +7,8 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic import model_validator
 from typing_extensions import Literal
+
+from app.secrets import SecretResolver
 
 
 class ProviderConfig(BaseModel):
@@ -139,9 +140,10 @@ class AppConfig(BaseModel):
 
 class TaskQueueSettings(BaseModel):
     enabled: bool = True
-    backend: Literal["memory"] = "memory"
+    backend: Literal["memory", "sqlite"] = "memory"
     worker_threads: int = 1
     max_queue_size: int = 100
+    sqlite_path: str | None = None
 
     @model_validator(mode="after")
     def validate_queue_settings(self) -> "TaskQueueSettings":
@@ -149,19 +151,21 @@ class TaskQueueSettings(BaseModel):
             raise ValueError("tasks.worker_threads must be at least 1")
         if self.max_queue_size < 1:
             raise ValueError("tasks.max_queue_size must be at least 1")
+        if self.backend == "sqlite" and not self.sqlite_path:
+            self.sqlite_path = ".learn/tasks.db"
         return self
 
 
 def load_config(path: Path | str = "config/llm.yaml") -> AppConfig:
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    return AppConfig.model_validate(_resolve_env_refs(raw))
+    return AppConfig.model_validate(_resolve_env_refs(raw, resolver=SecretResolver()))
 
 
-def _resolve_env_refs(value: Any) -> Any:
+def _resolve_env_refs(value: Any, resolver: SecretResolver) -> Any:
     if isinstance(value, dict):
-        return {key: _resolve_env_refs(inner) for key, inner in value.items()}
+        return {key: _resolve_env_refs(inner, resolver=resolver) for key, inner in value.items()}
     if isinstance(value, list):
-        return [_resolve_env_refs(item) for item in value]
+        return [_resolve_env_refs(item, resolver=resolver) for item in value]
     if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
-        return os.getenv(value[2:-1])
+        return resolver.resolve(value)
     return value
