@@ -116,6 +116,8 @@ Role behavior:
 - `operator`: read + write learning APIs
 - `admin`: read + write + operational APIs such as `/metrics` and `/api/audit`
 
+When role-based access is enabled, newly created sessions are scoped to the creating principal. Non-admin principals only see and fetch their own sessions.
+
 Send the header on protected requests:
 
 ```powershell

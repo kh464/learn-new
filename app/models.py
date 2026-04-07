@@ -98,6 +98,7 @@ class LearnerState(BaseModel):
     session_id: str
     domain: str
     learner_profile: LearnerProfile
+    owner_id: str = ""
     current_stage: int = 1
     curriculum_version: int = 1
     active_skills: list[str] = Field(default_factory=list)
@@ -117,10 +118,11 @@ class LearnerState(BaseModel):
     review_queue: list[str] = Field(default_factory=list)
 
     @classmethod
-    def new(cls, domain: str, profile: LearnerProfile) -> "LearnerState":
+    def new(cls, domain: str, profile: LearnerProfile, owner_id: str = "") -> "LearnerState":
         return cls(
             session_id=uuid4().hex,
             domain=domain,
+            owner_id=owner_id,
             learner_profile=profile,
             logs=[
                 LogEvent(

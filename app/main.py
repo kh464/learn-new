@@ -76,6 +76,15 @@ def create_app(
             return "viewer"
         return "operator"
 
+    def can_access_session(principal_name: str, principal_role: str, owner_id: str) -> bool:
+        if not config.security.enabled:
+            return True
+        if principal_role == "admin":
+            return True
+        if not owner_id:
+            return True
+        return principal_name == owner_id
+
     @app.middleware("http")
     async def production_guards(request: Request, call_next):
         request_id = uuid4().hex
@@ -83,6 +92,8 @@ def create_app(
         request_id_header = config.observability.request_id_header
         principal_name = "anonymous"
         principal_role = "anonymous"
+        request.state.principal_name = principal_name
+        request.state.principal_role = principal_role
 
         def finalize(response):
             latency_ms = (perf_counter() - started) * 1000
@@ -109,6 +120,8 @@ def create_app(
             if principal is None:
                 return finalize(JSONResponse(status_code=401, content={"detail": "Unauthorized"}))
             principal_name, principal_role = principal
+            request.state.principal_name = principal_name
+            request.state.principal_role = principal_role
             if role_levels[principal_role] < role_levels[required_role]:
                 return finalize(JSONResponse(status_code=403, content={"detail": "Forbidden"}))
 
@@ -161,24 +174,34 @@ def create_app(
         }
 
     @app.post("/api/sessions", response_model=StateResponse, status_code=201)
-    def create_session(payload: CreateSessionRequest) -> StateResponse:
+    def create_session(payload: CreateSessionRequest, request: Request) -> StateResponse:
         state = app.state.orchestrator.create_session(
             domain=payload.domain,
             profile=payload.to_profile(),
+            owner_id=request.state.principal_name if config.security.enabled else "",
         )
         return StateResponse.from_state(state)
 
     @app.get("/api/sessions", response_model=SessionIndexResponse)
-    def list_sessions() -> SessionIndexResponse:
+    def list_sessions(request: Request) -> SessionIndexResponse:
         payload = app.state.orchestrator.list_sessions()
+        if config.security.enabled and request.state.principal_role != "admin":
+            payload["items"] = [
+                item
+                for item in payload["items"]
+                if can_access_session(request.state.principal_name, request.state.principal_role, item.get("owner_id", ""))
+            ]
+            payload["total"] = len(payload["items"])
         return SessionIndexResponse.model_validate(payload)
 
     @app.post("/api/sessions/{session_id}/knowledge", response_model=UploadKnowledgeResponse, status_code=201)
-    def upload_knowledge(session_id: str, payload: UploadKnowledgeRequest) -> UploadKnowledgeResponse:
+    def upload_knowledge(session_id: str, payload: UploadKnowledgeRequest, request: Request) -> UploadKnowledgeResponse:
         try:
-            app.state.orchestrator.get_state(session_id)
+            state = app.state.orchestrator.get_state(session_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session not found") from exc
+        if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+            raise HTTPException(status_code=404, detail="Session not found")
         service = KnowledgeService(app.state.orchestrator.workspace)
         chunks = service.ingest_text(
             session_id=session_id,
@@ -189,26 +212,33 @@ def create_app(
         return UploadKnowledgeResponse(session_id=session_id, chunks_added=len(chunks))
 
     @app.get("/api/sessions/{session_id}/knowledge/search", response_model=SearchKnowledgeResponse)
-    def search_knowledge(session_id: str, query: str, limit: int = 3) -> SearchKnowledgeResponse:
+    def search_knowledge(session_id: str, request: Request, query: str, limit: int = 3) -> SearchKnowledgeResponse:
         try:
-            app.state.orchestrator.get_state(session_id)
+            state = app.state.orchestrator.get_state(session_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session not found") from exc
+        if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+            raise HTTPException(status_code=404, detail="Session not found")
         service = KnowledgeService(app.state.orchestrator.workspace)
         items = service.retrieve(session_id=session_id, query=query, limit=limit)
         return SearchKnowledgeResponse(items=items)
 
     @app.get("/api/sessions/{session_id}", response_model=StateResponse)
-    def get_session(session_id: str) -> StateResponse:
+    def get_session(session_id: str, request: Request) -> StateResponse:
         try:
             state = app.state.orchestrator.get_state(session_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session not found") from exc
+        if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+            raise HTTPException(status_code=404, detail="Session not found")
         return StateResponse.from_state(state)
 
     @app.post("/api/sessions/{session_id}/turns", response_model=StateResponse)
-    def run_turn(session_id: str, payload: TurnRequest) -> StateResponse:
+    def run_turn(session_id: str, payload: TurnRequest, request: Request) -> StateResponse:
         try:
+            state = app.state.orchestrator.get_state(session_id)
+            if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+                raise HTTPException(status_code=404, detail="Session not found")
             state = app.state.orchestrator.run_turn(
                 session_id=session_id,
                 learner_answer=payload.learner_answer,
@@ -218,56 +248,77 @@ def create_app(
         return StateResponse.from_state(state)
 
     @app.get("/api/sessions/{session_id}/reviews/due", response_model=DueReviewResponse)
-    def get_due_reviews(session_id: str) -> DueReviewResponse:
+    def get_due_reviews(session_id: str, request: Request) -> DueReviewResponse:
         try:
+            state = app.state.orchestrator.get_state(session_id)
+            if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+                raise HTTPException(status_code=404, detail="Session not found")
             items = app.state.orchestrator.get_due_reviews(session_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session not found") from exc
         return DueReviewResponse(items=items)
 
     @app.post("/api/sessions/{session_id}/reviews", response_model=StateResponse)
-    def start_review(session_id: str) -> StateResponse:
+    def start_review(session_id: str, request: Request) -> StateResponse:
         try:
+            state = app.state.orchestrator.get_state(session_id)
+            if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+                raise HTTPException(status_code=404, detail="Session not found")
             state = app.state.orchestrator.start_review(session_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session not found") from exc
         return StateResponse.from_state(state)
 
     @app.get("/api/sessions/{session_id}/summary", response_model=SessionSummaryResponse)
-    def get_session_summary(session_id: str) -> SessionSummaryResponse:
+    def get_session_summary(session_id: str, request: Request) -> SessionSummaryResponse:
         try:
+            state = app.state.orchestrator.get_state(session_id)
+            if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+                raise HTTPException(status_code=404, detail="Session not found")
             summary = app.state.orchestrator.get_session_summary(session_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session not found") from exc
         return SessionSummaryResponse.model_validate(summary)
 
     @app.get("/api/sessions/{session_id}/timeline", response_model=TimelineResponse)
-    def get_session_timeline(session_id: str, limit: int = 20) -> TimelineResponse:
+    def get_session_timeline(session_id: str, request: Request, limit: int = 20) -> TimelineResponse:
         try:
+            state = app.state.orchestrator.get_state(session_id)
+            if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+                raise HTTPException(status_code=404, detail="Session not found")
             timeline = app.state.orchestrator.get_session_timeline(session_id, limit=limit)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session not found") from exc
         return TimelineResponse.model_validate(timeline)
 
     @app.get("/api/sessions/{session_id}/checkpoints", response_model=CheckpointListResponse)
-    def list_checkpoints(session_id: str) -> CheckpointListResponse:
+    def list_checkpoints(session_id: str, request: Request) -> CheckpointListResponse:
         try:
+            state = app.state.orchestrator.get_state(session_id)
+            if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+                raise HTTPException(status_code=404, detail="Session not found")
             payload = app.state.orchestrator.list_checkpoints(session_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session not found") from exc
         return CheckpointListResponse.model_validate(payload)
 
     @app.post("/api/sessions/{session_id}/checkpoints/{checkpoint_id}/restore", response_model=StateResponse)
-    def restore_checkpoint(session_id: str, checkpoint_id: str) -> StateResponse:
+    def restore_checkpoint(session_id: str, checkpoint_id: str, request: Request) -> StateResponse:
         try:
+            owner_state = app.state.orchestrator.get_state(session_id)
+            if not can_access_session(request.state.principal_name, request.state.principal_role, owner_state.owner_id):
+                raise HTTPException(status_code=404, detail="Checkpoint not found")
             state = app.state.orchestrator.restore_checkpoint(session_id, checkpoint_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Checkpoint not found") from exc
         return StateResponse.from_state(state)
 
     @app.get("/api/sessions/{session_id}/export")
-    def export_session(session_id: str) -> dict:
+    def export_session(session_id: str, request: Request) -> dict:
         try:
+            state = app.state.orchestrator.get_state(session_id)
+            if not can_access_session(request.state.principal_name, request.state.principal_role, state.owner_id):
+                raise HTTPException(status_code=404, detail="Session not found")
             return app.state.orchestrator.export_session(session_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Session not found") from exc

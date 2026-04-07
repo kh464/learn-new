@@ -110,6 +110,7 @@ http://127.0.0.1:8000/dashboard
 
 如果启用了 `security.enabled=true`，除 `GET /health`、`GET /health/ready`、`GET /dashboard` 之外的接口都需要携带 `X-Admin-Key`。
 可以继续使用单个共享 key，也可以配置 `viewer / operator / admin` 三类 token。
+启用角色化 token 后，非 admin 默认只能看到自己创建的 session。
 如果启用了 `rate_limit.enabled=true`，服务会按进程内窗口做基础限流。
 
 ## API 示例
@@ -270,6 +271,7 @@ docker build -t learn-new:local .
 - 已实现 timeline/summary 可观察性接口，前端可以直接读取 session 概览、掌握度和事件流
 - 已实现基础 admin API key 鉴权、进程内限流、`/metrics` 指标和 request id 响应头
 - 已实现角色化 token 访问控制，`viewer` 只读，`operator` 可写业务接口，`admin` 额外拥有 `/metrics` 与 `/api/audit`
+- 已实现基于 session owner 的可见性隔离，非 admin 默认只能访问自己创建的 session
 - 已实现 JSONL 审计日志落盘与 `/api/audit` 最近记录查询
 - 已实现 checkpoint 列表与恢复接口，可从 `.learn/checkpoints` 显式回滚 session 状态
 - 已实现 session export 接口，可导出 summary、timeline、checkpoint 和核心工件

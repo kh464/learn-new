@@ -37,8 +37,8 @@ class LearningOrchestrator:
         self.progress = ProgressMonitorAgent()
         self.graph = self._build_graph()
 
-    def create_session(self, domain: str, profile: LearnerProfile) -> LearnerState:
-        state = LearnerState.new(domain=domain, profile=profile)
+    def create_session(self, domain: str, profile: LearnerProfile, owner_id: str = "") -> LearnerState:
+        state = LearnerState.new(domain=domain, profile=profile, owner_id=owner_id)
         self.workspace.bootstrap_session(state)
         if self.session_store is not None:
             self.session_store.save_state(state)
@@ -182,6 +182,7 @@ class LearningOrchestrator:
                     "current_stage": state.current_stage,
                     "teaching_mode": state.teaching_mode,
                     "assessment_score": state.assessment_score,
+                    "owner_id": state.owner_id,
                     "summary": summary,
                 }
             )

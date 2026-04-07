@@ -164,3 +164,67 @@ def test_api_enforces_role_based_tokens_and_exposes_audit_log(tmp_path: Path) ->
     assert any(item["principal"] == "viewer" and item["status_code"] == 403 for item in payload["items"])
     assert any(item["principal"] == "operator" and item["status_code"] == 201 for item in payload["items"])
     assert any(item["principal"] == "admin" and item["path"] == "/metrics" for item in payload["items"])
+
+
+def test_api_limits_session_visibility_to_owner_unless_admin(tmp_path: Path) -> None:
+    config_path = tmp_path / "llm.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "llm:",
+                "  default_provider: siliconflow",
+                "  default_profile: chat",
+                "  providers:",
+                "    siliconflow:",
+                "      enabled: true",
+                "      base_url: https://api.siliconflow.cn/v1",
+                "      api_key:",
+                "      models:",
+                "        chat: Qwen/Qwen2.5-7B-Instruct",
+                "  routing:",
+                "    profiles:",
+                "      chat:",
+                "        provider: siliconflow",
+                "        model: Qwen/Qwen2.5-7B-Instruct",
+                "security:",
+                "  enabled: true",
+                "  api_key_header: X-Admin-Key",
+                "  principals:",
+                "    - name: alice",
+                "      api_key: alice-key",
+                "      role: operator",
+                "    - name: bob",
+                "      api_key: bob-key",
+                "      role: operator",
+                "    - name: root",
+                "      api_key: root-key",
+                "      role: admin",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    app = create_app(workspace_root=tmp_path / ".learn", config_path=config_path)
+    client = TestClient(app)
+
+    created = client.post(
+        "/api/sessions",
+        headers={"X-Admin-Key": "alice-key"},
+        json={"domain": "Python async programming", "goal": "Master async/await"},
+    )
+    assert created.status_code == 201
+    session_id = created.json()["session_id"]
+
+    alice_list = client.get("/api/sessions", headers={"X-Admin-Key": "alice-key"})
+    assert alice_list.status_code == 200
+    assert alice_list.json()["total"] == 1
+
+    bob_list = client.get("/api/sessions", headers={"X-Admin-Key": "bob-key"})
+    assert bob_list.status_code == 200
+    assert bob_list.json()["total"] == 0
+
+    bob_get = client.get(f"/api/sessions/{session_id}", headers={"X-Admin-Key": "bob-key"})
+    assert bob_get.status_code == 404
+
+    admin_get = client.get(f"/api/sessions/{session_id}", headers={"X-Admin-Key": "root-key"})
+    assert admin_get.status_code == 200
