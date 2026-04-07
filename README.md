@@ -7,13 +7,15 @@
 - FastAPI 服务
 - LangGraph 编排学习流程
 - 本地 `.learn/` 文件系统持久化
-- 可选 SQLite 会话状态与 checkpoint 元数据存储
+- 可选 SQLite / PostgreSQL 会话状态与 checkpoint 元数据存储
 - 本地知识上传、分块检索和轻量 RAG
+- 可选 Qdrant 向量知识索引
 - 可选本地 / Docker 隔离 Python 沙箱执行与代码练习评估
 - 研究、课程、技能、讲解、练习、进度六类 agent
 - 可通过 `config/llm.yaml` 扩展到真实模型提供商
 - 支持可选 admin API key、基础限流、`/metrics` 和请求 ID
 - 支持角色化 API token、审计日志和运维接口保护
+- 支持 Redis 限流后端
 - 默认支持 SiliconFlow，且在无可用 API Key 时自动回退到本地 deterministic 模式
 
 ## 项目结构
@@ -264,6 +266,7 @@ docker build -t learn-new:local .
 - 默认使用确定性本地 agent 逻辑，避免没有外部服务时项目无法运行
 - 已接入 `config/llm.yaml` 和真实 LLM 网关；当 SiliconFlow key 可用时，`Researcher`、`Instructor`、`Practice` 会优先调用真实模型
 - 仍以本地文件系统为主，但已支持可选 SQLite 会话元数据存储，便于向正式数据库演进
+- 已支持 PostgreSQL 会话元数据存储、Redis 限流后端、Qdrant 知识索引接入路径
 - 默认使用本地轻量 Python 沙箱，适合开发期验证，不是完整生产级隔离
 - 已支持可切换 Docker 沙箱后端，可用 `sandbox.backend=docker` 启用容器隔离练习执行
 - 用 LangGraph 保留父 agent 主控和阶段流转结构

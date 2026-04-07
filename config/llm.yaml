@@ -54,6 +54,7 @@ llm:
 storage:
   backend: file
   sqlite_path: .learn/sessions.db
+  postgres_dsn: ${LEARN_NEW_POSTGRES_DSN}
 
 security:
   enabled: false
@@ -74,8 +75,11 @@ security:
 
 rate_limit:
   enabled: false
+  backend: memory
   requests: 120
   window_seconds: 60
+  redis_url: ${LEARN_NEW_REDIS_URL}
+  key_prefix: learn-new:rate
 
 observability:
   metrics_enabled: true
@@ -88,3 +92,9 @@ sandbox:
   docker_image: python:3.12-slim
   memory_mb: 256
   cpu_limit: 1.0
+
+knowledge:
+  backend: file
+  qdrant_url: ${LEARN_NEW_QDRANT_URL}
+  collection_name: learn-new
+  vector_size: 16

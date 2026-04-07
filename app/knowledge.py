@@ -29,9 +29,15 @@ class KnowledgeService:
             if part.strip()
         ]
         self.manager.append_knowledge_chunks(session_id, chunks)
+        if self.manager.knowledge_index is not None:
+            self.manager.knowledge_index.upsert(session_id=session_id, chunks=chunks)
         return chunks
 
     def retrieve(self, session_id: str, query: str, limit: int = 3) -> list[KnowledgeChunk]:
+        if self.manager.knowledge_index is not None:
+            indexed = self.manager.knowledge_index.search(session_id=session_id, query=query, limit=limit)
+            if indexed:
+                return indexed
         tokens = set(self._tokenize(query))
         scored: list[KnowledgeChunk] = []
         for chunk in self.manager.read_knowledge_chunks(session_id):

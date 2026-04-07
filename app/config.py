@@ -32,8 +32,9 @@ class LLMSettings(BaseModel):
 
 
 class StorageSettings(BaseModel):
-    backend: Literal["file", "sqlite"] = "file"
+    backend: Literal["file", "sqlite", "postgres"] = "file"
     sqlite_path: str | None = None
+    postgres_dsn: str | None = None
 
 
 class SecuritySettings(BaseModel):
@@ -45,8 +46,11 @@ class SecuritySettings(BaseModel):
 
 class RateLimitSettings(BaseModel):
     enabled: bool = False
+    backend: Literal["memory", "redis"] = "memory"
     requests: int = 120
     window_seconds: int = 60
+    redis_url: str | None = None
+    key_prefix: str = "learn-new:rate"
 
 
 class ObservabilitySettings(BaseModel):
@@ -63,6 +67,13 @@ class SandboxSettings(BaseModel):
     cpu_limit: float = 1.0
 
 
+class KnowledgeSettings(BaseModel):
+    backend: Literal["file", "qdrant"] = "file"
+    qdrant_url: str | None = None
+    collection_name: str = "learn-new"
+    vector_size: int = 16
+
+
 class SecurityPrincipal(BaseModel):
     name: str
     api_key: str
@@ -77,6 +88,7 @@ class AppConfig(BaseModel):
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
     sandbox: SandboxSettings = Field(default_factory=SandboxSettings)
+    knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
 
 
 def load_config(path: Path | str = "config/llm.yaml") -> AppConfig:

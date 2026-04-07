@@ -3,6 +3,7 @@ from __future__ import annotations
 from time import perf_counter
 from pathlib import Path
 from uuid import uuid4
+import importlib
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
@@ -24,7 +25,7 @@ from app.api.schemas import (
 from app.config import AppConfig, load_config
 from app.knowledge import KnowledgeService
 from app.orchestrator import LearningOrchestrator
-from app.runtime_ops import AuditLogger, InMemoryRateLimiter, MetricsRegistry
+from app.runtime_ops import AuditLogger, InMemoryRateLimiter, MetricsRegistry, RedisRateLimiter
 
 
 def create_app(
@@ -36,14 +37,23 @@ def create_app(
     orchestrator = LearningOrchestrator(workspace_root=Path(workspace_root), config=config)
     metrics = MetricsRegistry()
     audit_logger = AuditLogger(Path(config.observability.audit_log_path)) if config.observability.audit_log_path else None
-    rate_limiter = (
-        InMemoryRateLimiter(
-            requests=config.rate_limit.requests,
-            window_seconds=config.rate_limit.window_seconds,
-        )
-        if config.rate_limit.enabled
-        else None
-    )
+    rate_limiter = None
+    if config.rate_limit.enabled:
+        if config.rate_limit.backend == "redis":
+            if not config.rate_limit.redis_url:
+                raise RuntimeError("rate_limit.redis_url is required when rate_limit.backend=redis")
+            redis_module = importlib.import_module("redis")
+            rate_limiter = RedisRateLimiter(
+                requests=config.rate_limit.requests,
+                window_seconds=config.rate_limit.window_seconds,
+                client=redis_module.Redis.from_url(config.rate_limit.redis_url),
+                key_prefix=config.rate_limit.key_prefix,
+            )
+        else:
+            rate_limiter = InMemoryRateLimiter(
+                requests=config.rate_limit.requests,
+                window_seconds=config.rate_limit.window_seconds,
+            )
 
     app.state.orchestrator = orchestrator
     app.state.config = config
@@ -142,10 +152,12 @@ def create_app(
         return {
             "status": "ok",
             "storage_backend": config.storage.backend,
+            "knowledge_backend": config.knowledge.backend,
             "sandbox_backend": config.sandbox.backend,
             "metrics_enabled": config.observability.metrics_enabled,
             "security_enabled": config.security.enabled,
             "rate_limit_enabled": config.rate_limit.enabled,
+            "rate_limit_backend": config.rate_limit.backend,
         }
 
     if config.observability.metrics_enabled:

@@ -14,8 +14,9 @@ from app.agents.research import ResearcherAgent
 from app.agents.skillforge import SkillForgeAgent
 from app.llm import LLMGateway
 from app.models import LearnerProfile, LearnerState
-from app.session_store import SQLiteSessionStore
+from app.session_store import PostgresSessionStore, SQLiteSessionStore
 from app.sandbox import build_sandbox
+from app.vector_store import QdrantKnowledgeIndex
 from app.workspace import WorkspaceManager
 
 
@@ -27,6 +28,7 @@ class GraphState(TypedDict):
 class LearningOrchestrator:
     def __init__(self, workspace_root: Path, config: AppConfig | None = None) -> None:
         self.workspace = WorkspaceManager(root=Path(workspace_root))
+        self.workspace.knowledge_index = self._build_knowledge_index(config)
         self.session_store = self._build_session_store(workspace_root=Path(workspace_root), config=config)
         self.llm = LLMGateway(config=config) if config is not None else None
         self.researcher = ResearcherAgent(llm=self.llm)
@@ -216,11 +218,27 @@ class LearningOrchestrator:
         self._write_checkpoint(updated)
         return updated
 
-    def _build_session_store(self, workspace_root: Path, config: AppConfig | None) -> SQLiteSessionStore | None:
-        if config is None or config.storage.backend != "sqlite":
+    def _build_session_store(self, workspace_root: Path, config: AppConfig | None):
+        if config is None or config.storage.backend == "file":
             return None
-        sqlite_path = Path(config.storage.sqlite_path) if config.storage.sqlite_path else workspace_root / "sessions.db"
-        return SQLiteSessionStore(sqlite_path)
+        if config.storage.backend == "sqlite":
+            sqlite_path = Path(config.storage.sqlite_path) if config.storage.sqlite_path else workspace_root / "sessions.db"
+            return SQLiteSessionStore(sqlite_path)
+        postgres_dsn = config.storage.postgres_dsn
+        if not postgres_dsn:
+            raise RuntimeError("storage.postgres_dsn is required when storage.backend=postgres")
+        return PostgresSessionStore(postgres_dsn)
+
+    def _build_knowledge_index(self, config: AppConfig | None):
+        if config is None or config.knowledge.backend != "qdrant":
+            return None
+        if not config.knowledge.qdrant_url:
+            raise RuntimeError("knowledge.qdrant_url is required when knowledge.backend=qdrant")
+        return QdrantKnowledgeIndex(
+            base_url=config.knowledge.qdrant_url,
+            collection_name=config.knowledge.collection_name,
+            vector_size=config.knowledge.vector_size,
+        )
 
     def _load_state(self, session_id: str) -> LearnerState:
         if self.session_store is not None:

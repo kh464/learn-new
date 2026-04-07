@@ -12,6 +12,7 @@ from app.models import Curriculum, DomainMeta, KnowledgeChunk, LearnerState
 class WorkspaceManager:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
+        self.knowledge_index = None
 
     def session_root(self, session_id: str) -> Path:
         return self.root / "sessions" / session_id

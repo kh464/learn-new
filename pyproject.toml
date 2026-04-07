@@ -12,7 +12,9 @@ dependencies = [
   "langgraph",
   "openai",
   "pydantic",
+  "psycopg[binary]",
   "pyyaml",
+  "redis",
   "uvicorn",
 ]
 

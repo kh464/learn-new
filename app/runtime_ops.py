@@ -26,6 +26,21 @@ class InMemoryRateLimiter:
             return True
 
 
+class RedisRateLimiter:
+    def __init__(self, requests: int, window_seconds: int, client, key_prefix: str = "learn-new:rate") -> None:
+        self.requests = requests
+        self.window_seconds = window_seconds
+        self.client = client
+        self.key_prefix = key_prefix
+
+    def allow(self, key: str) -> bool:
+        bucket = f"{self.key_prefix}:{key}"
+        count = int(self.client.incr(bucket))
+        if count == 1:
+            self.client.expire(bucket, self.window_seconds)
+        return count <= self.requests
+
+
 class MetricsRegistry:
     def __init__(self) -> None:
         self._lock = Lock()

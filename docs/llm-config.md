@@ -20,6 +20,7 @@ The project uses `config/llm.yaml` as the runtime configuration file.
 6. `rate_limit` for in-process request throttling
 7. `observability` for request id and metrics behavior
 8. `sandbox` for practice execution isolation
+9. `knowledge` for vector index integration
 
 ## How to set the API key
 
@@ -59,6 +60,11 @@ $env:OPENAI_API_KEY="your_openai_key"
 $env:ANTHROPIC_API_KEY="your_anthropic_key"
 $env:DEEPSEEK_API_KEY="your_deepseek_key"
 $env:LEARN_NEW_ADMIN_KEY="your_admin_key"
+$env:LEARN_NEW_VIEWER_KEY="your_viewer_key"
+$env:LEARN_NEW_OPERATOR_KEY="your_operator_key"
+$env:LEARN_NEW_POSTGRES_DSN="postgresql://learn_new:learn_new@localhost:5432/learn_new"
+$env:LEARN_NEW_REDIS_URL="redis://localhost:6379/0"
+$env:LEARN_NEW_QDRANT_URL="http://localhost:6333"
 ```
 
 ## Storage backend
@@ -80,6 +86,16 @@ storage:
 ```
 
 When `backend=sqlite`, session state and checkpoint metadata can still be loaded even if local `state.json` or checkpoint files are missing. The `.learn/` workspace is still mirrored for artifacts and exports.
+
+Switch to PostgreSQL-backed session metadata:
+
+```yaml
+storage:
+  backend: postgres
+  postgres_dsn: ${LEARN_NEW_POSTGRES_DSN}
+```
+
+The PostgreSQL store persists session state and checkpoint metadata in SQL tables while the `.learn/` workspace continues to mirror artifacts for exports and local inspection.
 
 ## Admin API key protection
 
@@ -134,11 +150,15 @@ Enable simple in-process throttling:
 ```yaml
 rate_limit:
   enabled: true
+  backend: redis
   requests: 120
   window_seconds: 60
+  redis_url: ${LEARN_NEW_REDIS_URL}
+  key_prefix: learn-new:rate
 ```
 
-This limiter is process-local. It is useful for single-node hardening, but not a substitute for Redis or gateway-level rate limiting in production.
+With `backend=memory`, the limiter is process-local and useful for single-node hardening.
+With `backend=redis`, counters are stored in Redis instead of process memory.
 
 ## Metrics and request ids
 
@@ -179,3 +199,27 @@ sandbox:
 ```
 
 When `backend=docker`, the practice evaluator runs Python code inside an ephemeral container with `--network none`, `--read-only`, CPU limits, and memory limits.
+
+## Knowledge backend
+
+Default file-backed chunk storage:
+
+```yaml
+knowledge:
+  backend: file
+  qdrant_url: ${LEARN_NEW_QDRANT_URL}
+  collection_name: learn-new
+  vector_size: 16
+```
+
+Qdrant-backed retrieval:
+
+```yaml
+knowledge:
+  backend: qdrant
+  qdrant_url: ${LEARN_NEW_QDRANT_URL}
+  collection_name: learn-new
+  vector_size: 16
+```
+
+When `backend=qdrant`, ingested chunks are upserted into Qdrant with a deterministic in-process embedding and searched through the Qdrant HTTP API.

@@ -9,6 +9,11 @@ services:
     environment:
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
       LEARN_NEW_ADMIN_KEY: ${LEARN_NEW_ADMIN_KEY:-}
+      LEARN_NEW_VIEWER_KEY: ${LEARN_NEW_VIEWER_KEY:-}
+      LEARN_NEW_OPERATOR_KEY: ${LEARN_NEW_OPERATOR_KEY:-}
+      LEARN_NEW_POSTGRES_DSN: ${LEARN_NEW_POSTGRES_DSN:-}
+      LEARN_NEW_REDIS_URL: ${LEARN_NEW_REDIS_URL:-}
+      LEARN_NEW_QDRANT_URL: ${LEARN_NEW_QDRANT_URL:-}
     volumes:
       - learn_new_workspace:/app/.learn
       # Enable this mount if you switch sandbox.backend to docker inside the container.
