@@ -85,7 +85,7 @@ def create_app(
         path = request.url.path
         if path in {"/health", "/health/ready", "/dashboard"}:
             return None
-        if path in {"/metrics", "/api/audit", "/api/runtime/summary"}:
+        if path in {"/metrics", "/api/audit", "/api/runtime/summary", "/api/logs/app"}:
             return "admin"
         if not path.startswith("/api/"):
             return None
@@ -194,12 +194,20 @@ def create_app(
             return {"items": []}
         return {"items": audit_logger.read_recent(limit=limit)}
 
+    @app.get("/api/logs/app")
+    def get_app_log_events(limit: int = 100) -> dict:
+        if app_logger is None:
+            return {"items": []}
+        return {"items": app_logger.read_recent(limit=limit)}
+
     @app.get("/api/runtime/summary")
     def get_runtime_summary() -> dict:
         return runtime_health.runtime_summary(
             metrics_snapshot=metrics.snapshot(),
             audit_enabled=audit_logger is not None,
             audit_recent_count=len(audit_logger.read_recent(limit=20)) if audit_logger is not None else 0,
+            app_log_enabled=app_logger is not None,
+            app_log_recent_count=len(app_logger.read_recent(limit=20)) if app_logger is not None else 0,
             session_total=app.state.orchestrator.list_sessions()["total"],
         )
 

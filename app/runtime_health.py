@@ -30,7 +30,15 @@ class RuntimeHealthService:
             "checks": checks,
         }
 
-    def runtime_summary(self, metrics_snapshot: dict, audit_enabled: bool, audit_recent_count: int, session_total: int) -> dict:
+    def runtime_summary(
+        self,
+        metrics_snapshot: dict,
+        audit_enabled: bool,
+        audit_recent_count: int,
+        app_log_enabled: bool,
+        app_log_recent_count: int,
+        session_total: int,
+    ) -> dict:
         checks = self.checks()
         return {
             "healthy": all(item["healthy"] for item in checks.values()),
@@ -46,6 +54,11 @@ class RuntimeHealthService:
             "audit": {
                 "enabled": audit_enabled,
                 "recent_count": audit_recent_count,
+            },
+            "app_logs": {
+                "enabled": app_log_enabled,
+                "recent_count": app_log_recent_count,
+                "path": self.config.observability.app_log_path,
             },
             "sessions": {
                 "total": session_total,

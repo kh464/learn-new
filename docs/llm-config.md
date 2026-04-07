@@ -178,6 +178,7 @@ observability:
 ```
 
 `/api/audit` returns recent audit entries when accessed with an admin token.
+`/api/logs/app` returns recent structured application log events for admin operators.
 `/api/runtime/summary` returns backend selection, metric snapshots, live backend probe results, security summary, and audit summary for admin operators.
 `/health/ready` actively probes configured storage, rate-limit, knowledge, and sandbox backends. It returns `503` when a required backend is configured but unavailable.
 Unhandled exceptions return a JSON `500` response containing the active request id, and the event is appended to `observability.app_log_path`.

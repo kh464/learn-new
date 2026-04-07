@@ -106,6 +106,7 @@ http://127.0.0.1:8000/dashboard
 - `GET /metrics`
 - `GET /api/config`
 - `GET /api/audit`
+- `GET /api/logs/app`
 - `GET /api/runtime/summary`
 - `GET /api/sessions`
 - `POST /api/sessions`
@@ -125,6 +126,7 @@ http://127.0.0.1:8000/dashboard
 当必需后端不可达时会返回 `503`，并在响应体的 `checks` 字段里给出逐项诊断。
 
 `GET /api/config` 会返回当前默认 provider、默认 profile，以及 `llm_available`，用于判断当前是否会走真实模型。
+`GET /api/logs/app` 可供 admin 拉取最近结构化应用日志。
 
 如果启用了 `security.enabled=true`，除 `GET /health`、`GET /health/ready`、`GET /dashboard` 之外的接口都需要携带 `X-Admin-Key`。
 可以继续使用单个共享 key，也可以配置 `viewer / operator / admin` 三类 token。
