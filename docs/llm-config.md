@@ -3,6 +3,7 @@
 The project uses `config/llm.yaml` as the runtime configuration file.
 You can override the runtime file with `LEARN_NEW_CONFIG_PATH`.
 Mounted secret files can be resolved with `LEARN_NEW_SECRET_DIR`.
+External Vault secrets can be resolved with `vault:` references plus `LEARN_NEW_VAULT_*` environment variables.
 
 ## Current default
 
@@ -69,6 +70,9 @@ $env:LEARN_NEW_POSTGRES_DSN="postgresql://learn_new:learn_new@localhost:5432/lea
 $env:LEARN_NEW_REDIS_URL="redis://localhost:6379/0"
 $env:LEARN_NEW_QDRANT_URL="http://localhost:6333"
 $env:LEARN_NEW_SECRET_DIR="D:\path\to\secrets"
+$env:LEARN_NEW_VAULT_ADDR="https://vault.internal"
+$env:LEARN_NEW_VAULT_TOKEN="your_vault_token"
+$env:LEARN_NEW_VAULT_NAMESPACE="platform/team-a"
 ```
 
 Secret reference examples:
@@ -76,7 +80,36 @@ Secret reference examples:
 ```yaml
 api_key: ${secret:siliconflow_api_key}
 postgres_dsn: ${file:/run/secrets/learn-new/postgres_dsn}
+admin_key: ${vault:secret/data/learn-new#admin_key}
+siliconflow_api_key: ${vault:secret/data/learn-new#siliconflow_api_key}
 ```
+
+## Vault secrets
+
+For production, prefer Vault KV v2 over plain environment variables when you already run a central secrets platform.
+
+Supported environment variables:
+
+- `LEARN_NEW_VAULT_ADDR`
+- `LEARN_NEW_VAULT_TOKEN`
+- `LEARN_NEW_VAULT_TOKEN_FILE`
+- `LEARN_NEW_VAULT_NAMESPACE`
+
+Reference format:
+
+```yaml
+api_key: ${vault:secret/data/learn-new#siliconflow_api_key}
+```
+
+This resolves to:
+
+- HTTP GET `https://<vault-addr>/v1/secret/data/learn-new`
+- Header `X-Vault-Token: <token>`
+- Optional header `X-Vault-Namespace: <namespace>`
+- Field lookup `siliconflow_api_key` inside the KV v2 payload
+
+If `LEARN_NEW_VAULT_TOKEN` is not set, the resolver will fall back to `LEARN_NEW_VAULT_TOKEN_FILE`.
+Vault lookups are cached in-process per path so multiple config fields referencing the same secret document only trigger one Vault fetch during config load.
 
 ## Storage backend
 

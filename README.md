@@ -76,6 +76,14 @@ $env:LEARN_NEW_CONFIG_PATH="config/llm.production.yaml"
 $env:LEARN_NEW_SECRET_DIR="D:\\path\\to\\secrets"
 ```
 
+如果使用 HashiCorp Vault KV v2：
+
+```powershell
+$env:LEARN_NEW_VAULT_ADDR="https://vault.internal"
+$env:LEARN_NEW_VAULT_TOKEN="your_vault_token"
+$env:LEARN_NEW_VAULT_NAMESPACE="platform/team-a"
+```
+
 容器方式启动：
 
 ```powershell
@@ -168,6 +176,7 @@ http://127.0.0.1:8000/dashboard
 `WS /ws/tasks/{task_id}` 可流式接收后台任务的状态变化；dashboard 为了兼容浏览器环境，支持通过 query string 传递 `api_key` 连接该 WebSocket。
 `POST /api/sessions/{session_id}/knowledge/import-url` 可抓取外部 URL 文本并直接入库到当前 session 知识索引。
 URL 导入目前只接受 `http/https`，并按 `source + content` 指纹做幂等去重，重复导入不会重复写入 chunk。
+配置中的 secret 现在除了环境变量、挂载文件和 `LEARN_NEW_SECRET_DIR` 之外，也支持 HashiCorp Vault KV v2 引用，例如 `${vault:secret/data/learn-new#siliconflow_api_key}`。
 
 如果启用了 `security.enabled=true`，除 `GET /health`、`GET /health/ready`、`GET /dashboard` 之外的接口都需要携带 `X-Admin-Key`。
 可以继续使用单个共享 key，也可以配置 `viewer / operator / admin` 三类 token。
