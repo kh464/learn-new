@@ -41,17 +41,24 @@ def test_dashboard_page_is_served_and_references_core_apis(tmp_path: Path) -> No
     assert "/summary" in response.text
     assert "/timeline" in response.text
     assert "/reviews" in response.text
+    assert "/reviews/due" in response.text
     assert "/checkpoints" in response.text
     assert "/knowledge" in response.text
+    assert "/knowledge/search" in response.text
     assert "Start Review" in response.text
     assert "Restore Checkpoint" in response.text
     assert "Create Session" in response.text
     assert "Upload Knowledge" in response.text
+    assert "Search Knowledge" in response.text
+    assert "Due Review Queue" in response.text
     assert "domain-input" in response.text
     assert "goal-input" in response.text
     assert "knowledge-title-input" in response.text
     assert "knowledge-content-input" in response.text
     assert "knowledge-source-input" in response.text
+    assert "knowledge-query-input" in response.text
+    assert "due-review-list" in response.text
+    assert "knowledge-results" in response.text
     assert "Submit Turn" in response.text
     assert "answer-input" in response.text
     assert "Python async programming" in response.text

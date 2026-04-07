@@ -413,6 +413,23 @@ def render_dashboard() -> HTMLResponse:
           </article>
 
           <article class="block">
+            <h3>Search Knowledge</h3>
+            <p class="subtle">Query the indexed knowledge chunks already attached to the active session.</p>
+            <form id="knowledge-search-form" class="turn-form">
+              <div class="field">
+                <label for="knowledge-query-input">Query</label>
+                <input id="knowledge-query-input" name="query" placeholder="event loop scheduling" />
+              </div>
+              <div class="actions">
+                <button class="action secondary" type="submit">Search Knowledge</button>
+              </div>
+            </form>
+            <div id="knowledge-results" class="checkpoint-list">
+              <div class="empty">Search knowledge to inspect retrieved chunks.</div>
+            </div>
+          </article>
+
+          <article class="block">
             <h3>Checkpoints</h3>
             <p class="subtle">Restore any previously recorded state snapshot.</p>
             <div id="checkpoint-list" class="checkpoint-list">
@@ -433,6 +450,14 @@ def render_dashboard() -> HTMLResponse:
             <h3>Mastery Snapshot</h3>
             <div id="mastery" class="subtle">No mastery data yet.</div>
           </article>
+
+          <article class="block">
+            <h3>Due Review Queue</h3>
+            <p class="subtle">Concepts that are currently due based on the spaced-review schedule.</p>
+            <div id="due-review-list" class="checkpoint-list">
+              <div class="empty">No due reviews loaded.</div>
+            </div>
+          </article>
         </div>
       </section>
     </main>
@@ -446,6 +471,8 @@ def render_dashboard() -> HTMLResponse:
       activeSummary: null,
       activeTimeline: null,
       activeCheckpoints: [],
+      activeDueReviews: [],
+      activeKnowledgeResults: [],
     };
 
     const sessionList = document.getElementById('session-list');
@@ -461,6 +488,8 @@ def render_dashboard() -> HTMLResponse:
     const knowledgeTitleInput = document.getElementById('knowledge-title-input');
     const knowledgeSourceInput = document.getElementById('knowledge-source-input');
     const knowledgeContentInput = document.getElementById('knowledge-content-input');
+    const knowledgeSearchForm = document.getElementById('knowledge-search-form');
+    const knowledgeQueryInput = document.getElementById('knowledge-query-input');
     const lessonText = document.getElementById('lesson-text');
     const lessonQuiz = document.getElementById('lesson-quiz');
     const practiceText = document.getElementById('practice-text');
@@ -468,6 +497,8 @@ def render_dashboard() -> HTMLResponse:
     const timeline = document.getElementById('timeline');
     const mastery = document.getElementById('mastery');
     const checkpointList = document.getElementById('checkpoint-list');
+    const dueReviewList = document.getElementById('due-review-list');
+    const knowledgeResults = document.getElementById('knowledge-results');
     const actionStatus = document.getElementById('action-status');
     const startReviewButton = document.getElementById('start-review');
     const refreshButton = document.getElementById('refresh-data');
@@ -528,6 +559,8 @@ def render_dashboard() -> HTMLResponse:
         timeline.innerHTML = '<div class="empty">No timeline yet.</div>';
         mastery.textContent = 'No mastery data yet.';
         checkpointList.innerHTML = '<div class="empty">No checkpoints loaded.</div>';
+        dueReviewList.innerHTML = '<div class="empty">No due reviews loaded.</div>';
+        knowledgeResults.innerHTML = '<div class="empty">Search knowledge to inspect retrieved chunks.</div>';
         return;
       }
 
@@ -578,6 +611,8 @@ def render_dashboard() -> HTMLResponse:
       `;
 
       renderCheckpoints();
+      renderDueReviews();
+      renderKnowledgeResults();
     }
 
     function renderCheckpoints() {
@@ -608,6 +643,39 @@ def render_dashboard() -> HTMLResponse:
       }
     }
 
+    function renderDueReviews() {
+      if (!state.activeDueReviews.length) {
+        dueReviewList.innerHTML = '<div class="empty">No due reviews right now.</div>';
+        return;
+      }
+
+      dueReviewList.innerHTML = state.activeDueReviews.map((item) => `
+        <div class="checkpoint-item">
+          <strong>${item}</strong>
+        </div>
+      `).join('');
+    }
+
+    function renderKnowledgeResults() {
+      if (!state.activeKnowledgeResults.length) {
+        knowledgeResults.innerHTML = '<div class="empty">Search knowledge to inspect retrieved chunks.</div>';
+        return;
+      }
+
+      knowledgeResults.innerHTML = state.activeKnowledgeResults.map((item) => `
+        <div class="checkpoint-item">
+          <header>
+            <strong>${item.title}</strong>
+            <span class="badge">score ${item.score}</span>
+          </header>
+          <p class="subtle">${item.text}</p>
+          <div class="session-meta">
+            <span class="badge">${item.source}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
     async function loadSessions() {
       const payload = await fetchJson('/api/sessions');
       state.sessions = payload.items;
@@ -627,17 +695,20 @@ def render_dashboard() -> HTMLResponse:
       renderSessionList();
       setStatus(`Loading ${sessionId}...`);
 
-      const [session, summary, timelineData, checkpoints] = await Promise.all([
+      const [session, summary, timelineData, checkpoints, dueReviews] = await Promise.all([
         fetchJson(`/api/sessions/${sessionId}`),
         fetchJson(`/api/sessions/${sessionId}/summary`),
         fetchJson(`/api/sessions/${sessionId}/timeline?limit=12`),
         fetchJson(`/api/sessions/${sessionId}/checkpoints`),
+        fetchJson(`/api/sessions/${sessionId}/reviews/due`),
       ]);
 
       state.activeSession = session;
       state.activeSummary = summary;
       state.activeTimeline = timelineData;
       state.activeCheckpoints = checkpoints.items;
+      state.activeDueReviews = dueReviews.items;
+      state.activeKnowledgeResults = [];
       renderSessionDetails();
       setStatus(`Loaded session ${sessionId}.`);
     }
@@ -704,6 +775,23 @@ def render_dashboard() -> HTMLResponse:
       setStatus('Knowledge uploaded.');
     }
 
+    async function searchKnowledge() {
+      if (!state.activeSessionId) {
+        setStatus('Select or create a session first.');
+        return;
+      }
+      const query = knowledgeQueryInput.value.trim();
+      if (!query) {
+        setStatus('Search Knowledge requires a query.');
+        return;
+      }
+      setStatus('Searching knowledge...');
+      const payload = await fetchJson(`/api/sessions/${state.activeSessionId}/knowledge/search?query=${encodeURIComponent(query)}`);
+      state.activeKnowledgeResults = payload.items;
+      renderKnowledgeResults();
+      setStatus(`Knowledge search returned ${payload.items.length} result(s).`);
+    }
+
     function openExport() {
       if (!state.activeSessionId) return;
       window.open(`/api/sessions/${state.activeSessionId}/export`, '_blank');
@@ -746,6 +834,11 @@ def render_dashboard() -> HTMLResponse:
     knowledgeForm.addEventListener('submit', (event) => {
       event.preventDefault();
       uploadKnowledge().catch((error) => setStatus(`Upload Knowledge failed: ${error.message}`));
+    });
+
+    knowledgeSearchForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      searchKnowledge().catch((error) => setStatus(`Search Knowledge failed: ${error.message}`));
     });
 
     refreshButton.addEventListener('click', () => {
