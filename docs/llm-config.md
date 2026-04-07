@@ -175,6 +175,8 @@ observability:
   request_id_header: X-Request-ID
   audit_log_path: .learn/audit/events.jsonl
   app_log_path: .learn/logs/app.jsonl
+  audit_log_max_lines: 5000
+  app_log_max_lines: 5000
 ```
 
 `/api/audit` returns recent audit entries when accessed with an admin token.
@@ -182,6 +184,7 @@ observability:
 `/api/runtime/summary` returns backend selection, metric snapshots, live backend probe results, security summary, and audit summary for admin operators.
 `/health/ready` actively probes configured storage, rate-limit, knowledge, and sandbox backends. It returns `503` when a required backend is configured but unavailable.
 Unhandled exceptions return a JSON `500` response containing the active request id, and the event is appended to `observability.app_log_path`.
+`audit_log_max_lines` and `app_log_max_lines` trim older JSONL entries after writes so local log files stay bounded.
 
 ## Sandbox backend
 

@@ -87,6 +87,8 @@ class ObservabilitySettings(BaseModel):
     request_id_header: str = "X-Request-ID"
     audit_log_path: str | None = ".learn/audit/events.jsonl"
     app_log_path: str | None = ".learn/logs/app.jsonl"
+    audit_log_max_lines: int | None = 5000
+    app_log_max_lines: int | None = 5000
 
 
 class SandboxSettings(BaseModel):

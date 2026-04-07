@@ -40,8 +40,22 @@ def create_app(
     orchestrator = LearningOrchestrator(workspace_root=Path(workspace_root), config=config)
     metrics = MetricsRegistry()
     runtime_health = RuntimeHealthService(config=config, workspace_root=Path(workspace_root))
-    audit_logger = AuditLogger(Path(config.observability.audit_log_path)) if config.observability.audit_log_path else None
-    app_logger = AppEventLogger(Path(config.observability.app_log_path)) if config.observability.app_log_path else None
+    audit_logger = (
+        AuditLogger(
+            Path(config.observability.audit_log_path),
+            max_lines=config.observability.audit_log_max_lines,
+        )
+        if config.observability.audit_log_path
+        else None
+    )
+    app_logger = (
+        AppEventLogger(
+            Path(config.observability.app_log_path),
+            max_lines=config.observability.app_log_max_lines,
+        )
+        if config.observability.app_log_path
+        else None
+    )
     rate_limiter = None
     if config.rate_limit.enabled:
         if config.rate_limit.backend == "redis":

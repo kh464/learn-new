@@ -97,8 +97,9 @@ class MetricsRegistry:
 
 
 class AuditLogger:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, max_lines: int | None = None) -> None:
         self.path = Path(path)
+        self.max_lines = max_lines
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = Lock()
 
@@ -107,6 +108,7 @@ class AuditLogger:
         with self._lock:
             with self.path.open("a", encoding="utf-8") as handle:
                 handle.write(line + "\n")
+            self._trim_if_needed()
 
     def read_recent(self, limit: int = 100) -> list[dict]:
         if not self.path.exists():
@@ -115,6 +117,15 @@ class AuditLogger:
             lines = self.path.read_text(encoding="utf-8").splitlines()
         items = [json.loads(line) for line in lines if line.strip()]
         return items[-limit:][::-1]
+
+    def _trim_if_needed(self) -> None:
+        if self.max_lines is None or self.max_lines <= 0 or not self.path.exists():
+            return
+        lines = self.path.read_text(encoding="utf-8").splitlines()
+        if len(lines) <= self.max_lines:
+            return
+        trimmed = lines[-self.max_lines :]
+        self.path.write_text("\n".join(trimmed) + "\n", encoding="utf-8")
 
 
 class AppEventLogger(AuditLogger):

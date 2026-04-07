@@ -76,6 +76,12 @@ docker compose up --build
 docker compose -f docker-compose.yml -f docker-compose.infra.yml up --build
 ```
 
+带 Prometheus + Grafana 的观测模板启动：
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.infra.yml -f docker-compose.observability.yml up --build
+```
+
 如果你直接在 Windows 终端里运行 Python 命令看到中文显示异常，优先使用 `scripts/dev.ps1` 和 `scripts/test.ps1`。
 这两个脚本会先把控制台和 Python I/O 切到 UTF-8，再启动服务或测试。
 
@@ -134,6 +140,7 @@ http://127.0.0.1:8000/dashboard
 如果启用了 `rate_limit.enabled=true`，服务会按鉴权后的 principal 优先限流；匿名流量则退回到 client IP 维度。
 触发限流时会返回 `429`，并带上 `Retry-After` 响应头。
 未处理的服务端异常会返回 `500` JSON，并在响应体里附带 `request_id`；同时会写入结构化应用日志，便于按请求回溯。
+审计日志和应用日志默认都会自动裁剪，只保留最近配置条数，避免单文件无限增长。
 
 ## API 示例
 
@@ -305,6 +312,7 @@ docker build -t learn-new:local .
 - 已实现按 path/status 聚合的 metrics，以及 `/api/runtime/summary` 运行时摘要
 - 已实现主动式 readiness probe，`/health/ready` 可返回各后端逐项健康诊断
 - 已实现结构化应用日志落盘，未处理异常会附带 request id 并写入 `app_log_path`
+- 已为 audit/app 日志补充按行数自动裁剪的 retention 配置
 - 已实现 checkpoint 列表与恢复接口，可从 `.learn/checkpoints` 显式回滚 session 状态
 - 已实现 session export 接口，可导出 summary、timeline、checkpoint 和核心工件
 - 已实现 session index 接口，前端仪表盘可以直接列出全部学习会话
@@ -312,6 +320,7 @@ docker build -t learn-new:local .
 - 已补充 `Dockerfile`、`.dockerignore`、`docker-compose.yml` 作为单节点部署底座
 - 已补充 `config/llm.production.yaml` 和 `docker-compose.infra.yml`，可直接拉起 PostgreSQL、Redis、Qdrant 的基础生产模板
 - 容器模板已补充 healthcheck、只读根文件系统、`no-new-privileges`、`cap_drop=ALL`、`tmpfs` 与 `pids_limit`
+- 已补充 `docker-compose.observability.yml`、Prometheus 抓取配置和 Grafana datasource provisioning
 - 已补充基础备份与恢复脚本，带 manifest 校验与显式 `-Force` 护栏，便于单节点灾备和本地恢复
 
 后续扩展优先级建议：

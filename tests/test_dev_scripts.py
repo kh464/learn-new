@@ -26,3 +26,14 @@ def test_backup_and_restore_scripts_include_operational_safety_guards() -> None:
     assert "backup-manifest.json" in restore_script
     assert "throw \"Backup archive does not contain backup-manifest.json" in restore_script
     assert "throw \"Refusing to remove existing .learn without -Force." in restore_script
+
+
+def test_observability_compose_templates_exist() -> None:
+    compose_file = Path("docker-compose.observability.yml").read_text(encoding="utf-8")
+    prometheus_file = Path("ops/prometheus/prometheus.yml").read_text(encoding="utf-8")
+    datasource_file = Path("ops/grafana/provisioning/datasources/prometheus.yml").read_text(encoding="utf-8")
+
+    assert "prometheus:" in compose_file
+    assert "grafana:" in compose_file
+    assert "/metrics" in prometheus_file
+    assert "Prometheus" in datasource_file
