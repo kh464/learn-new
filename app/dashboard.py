@@ -362,6 +362,7 @@ def render_dashboard() -> HTMLResponse:
         <div class="toolbar">
           <button id="start-review" class="action">Start Review</button>
           <button id="refresh-data" class="action secondary">Refresh</button>
+          <button id="load-export-preview" class="action secondary">Load Export Preview</button>
           <button id="export-session" class="action ghost">Open Export JSON</button>
         </div>
         <form id="turn-form" class="turn-form">
@@ -452,11 +453,22 @@ def render_dashboard() -> HTMLResponse:
           </article>
 
           <article class="block">
+            <h3>Latest Feedback</h3>
+            <div id="latest-feedback" class="subtle">No feedback yet.</div>
+          </article>
+
+          <article class="block">
             <h3>Due Review Queue</h3>
             <p class="subtle">Concepts that are currently due based on the spaced-review schedule.</p>
             <div id="due-review-list" class="checkpoint-list">
               <div class="empty">No due reviews loaded.</div>
             </div>
+          </article>
+
+          <article class="block">
+            <h3>Session Export Preview</h3>
+            <p class="subtle">Load the current session bundle inline before opening the raw JSON in a new tab.</p>
+            <div id="export-preview" class="codebox">Load export preview to inspect the current session bundle.</div>
           </article>
         </div>
       </section>
@@ -473,6 +485,7 @@ def render_dashboard() -> HTMLResponse:
       activeCheckpoints: [],
       activeDueReviews: [],
       activeKnowledgeResults: [],
+      activeExportPreview: null,
     };
 
     const sessionList = document.getElementById('session-list');
@@ -499,6 +512,9 @@ def render_dashboard() -> HTMLResponse:
     const checkpointList = document.getElementById('checkpoint-list');
     const dueReviewList = document.getElementById('due-review-list');
     const knowledgeResults = document.getElementById('knowledge-results');
+    const latestFeedback = document.getElementById('latest-feedback');
+    const loadExportPreviewButton = document.getElementById('load-export-preview');
+    const exportPreview = document.getElementById('export-preview');
     const actionStatus = document.getElementById('action-status');
     const startReviewButton = document.getElementById('start-review');
     const refreshButton = document.getElementById('refresh-data');
@@ -561,6 +577,8 @@ def render_dashboard() -> HTMLResponse:
         checkpointList.innerHTML = '<div class="empty">No checkpoints loaded.</div>';
         dueReviewList.innerHTML = '<div class="empty">No due reviews loaded.</div>';
         knowledgeResults.innerHTML = '<div class="empty">Search knowledge to inspect retrieved chunks.</div>';
+        latestFeedback.textContent = 'No feedback yet.';
+        exportPreview.textContent = 'Load export preview to inspect the current session bundle.';
         return;
       }
 
@@ -613,6 +631,8 @@ def render_dashboard() -> HTMLResponse:
       renderCheckpoints();
       renderDueReviews();
       renderKnowledgeResults();
+      renderLatestFeedback();
+      renderExportPreview();
     }
 
     function renderCheckpoints() {
@@ -676,6 +696,18 @@ def render_dashboard() -> HTMLResponse:
       `).join('');
     }
 
+    function renderLatestFeedback() {
+      latestFeedback.textContent = state.activeSession?.latest_feedback ?? 'No feedback yet.';
+    }
+
+    function renderExportPreview() {
+      if (!state.activeExportPreview) {
+        exportPreview.textContent = 'Load export preview to inspect the current session bundle.';
+        return;
+      }
+      exportPreview.textContent = JSON.stringify(state.activeExportPreview, null, 2);
+    }
+
     async function loadSessions() {
       const payload = await fetchJson('/api/sessions');
       state.sessions = payload.items;
@@ -709,6 +741,7 @@ def render_dashboard() -> HTMLResponse:
       state.activeCheckpoints = checkpoints.items;
       state.activeDueReviews = dueReviews.items;
       state.activeKnowledgeResults = [];
+      state.activeExportPreview = null;
       renderSessionDetails();
       setStatus(`Loaded session ${sessionId}.`);
     }
@@ -792,6 +825,17 @@ def render_dashboard() -> HTMLResponse:
       setStatus(`Knowledge search returned ${payload.items.length} result(s).`);
     }
 
+    async function loadExportPreview() {
+      if (!state.activeSessionId) {
+        setStatus('Select or create a session first.');
+        return;
+      }
+      setStatus('Loading export preview...');
+      state.activeExportPreview = await fetchJson(`/api/sessions/${state.activeSessionId}/export`);
+      renderExportPreview();
+      setStatus('Export preview loaded.');
+    }
+
     function openExport() {
       if (!state.activeSessionId) return;
       window.open(`/api/sessions/${state.activeSessionId}/export`, '_blank');
@@ -850,6 +894,9 @@ def render_dashboard() -> HTMLResponse:
     });
 
     exportButton.addEventListener('click', openExport);
+    loadExportPreviewButton.addEventListener('click', () => {
+      loadExportPreview().catch((error) => setStatus(`Load Export Preview failed: ${error.message}`));
+    });
 
     loadSessions().catch((error) => {
       sessionList.innerHTML = `<div class="empty">Dashboard load failed: ${error.message}</div>`;

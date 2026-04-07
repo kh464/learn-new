@@ -70,6 +70,8 @@ http://127.0.0.1:8000/dashboard
 - 提交 learner answer 推进一轮教学
 - 启动显式 review 回合
 - 查看当前到期复习队列
+- 查看当前 session 的 latest feedback
+- 在 dashboard 内预览 session export 快照
 - 恢复历史 checkpoint
 - 导出当前 session JSON
 
@@ -234,7 +236,7 @@ Invoke-RestMethod `
 - 已实现 checkpoint 列表与恢复接口，可从 `.learn/checkpoints` 显式回滚 session 状态
 - 已实现 session export 接口，可导出 summary、timeline、checkpoint 和核心工件
 - 已实现 session index 接口，前端仪表盘可以直接列出全部学习会话
-- 已实现轻量 dashboard 页面，可直接消费现有 API 展示 session list、summary、timeline、lesson、practice、due review queue、knowledge search，并支持创建 session、上传知识、检索知识、提交回答、启动 review、恢复 checkpoint、导出 session
+- 已实现轻量 dashboard 页面，可直接消费现有 API 展示 session list、summary、timeline、lesson、practice、latest feedback、due review queue、knowledge search、export preview，并支持创建 session、上传知识、检索知识、提交回答、启动 review、恢复 checkpoint、预览导出、导出 session
 
 后续扩展优先级建议：
 
