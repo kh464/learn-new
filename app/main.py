@@ -24,7 +24,7 @@ from app.api.schemas import (
 from app.config import AppConfig, load_config
 from app.knowledge import KnowledgeService
 from app.orchestrator import LearningOrchestrator
-from app.runtime_ops import InMemoryRateLimiter, MetricsRegistry
+from app.runtime_ops import AuditLogger, InMemoryRateLimiter, MetricsRegistry
 
 
 def create_app(
@@ -35,6 +35,7 @@ def create_app(
     config = load_config(config_path)
     orchestrator = LearningOrchestrator(workspace_root=Path(workspace_root), config=config)
     metrics = MetricsRegistry()
+    audit_logger = AuditLogger(Path(config.observability.audit_log_path)) if config.observability.audit_log_path else None
     rate_limiter = (
         InMemoryRateLimiter(
             requests=config.rate_limit.requests,
@@ -47,24 +48,69 @@ def create_app(
     app.state.orchestrator = orchestrator
     app.state.config = config
     app.state.metrics = metrics
+    app.state.audit_logger = audit_logger
+
+    role_levels = {"viewer": 1, "operator": 2, "admin": 3}
+
+    def get_principal(api_key: str | None) -> tuple[str, str] | None:
+        if not api_key:
+            return None
+        if config.security.principals:
+            for principal in config.security.principals:
+                if api_key == principal.api_key:
+                    return principal.name, principal.role
+            return None
+        if config.security.api_key and api_key == config.security.api_key:
+            return "admin", "admin"
+        return None
+
+    def required_role_for(request: Request) -> str | None:
+        path = request.url.path
+        if path in {"/health", "/health/ready", "/dashboard"}:
+            return None
+        if path == "/metrics" or path == "/api/audit":
+            return "admin"
+        if not path.startswith("/api/"):
+            return None
+        if request.method in {"GET", "HEAD", "OPTIONS"}:
+            return "viewer"
+        return "operator"
 
     @app.middleware("http")
     async def production_guards(request: Request, call_next):
         request_id = uuid4().hex
         started = perf_counter()
         request_id_header = config.observability.request_id_header
+        principal_name = "anonymous"
+        principal_role = "anonymous"
 
         def finalize(response):
             latency_ms = (perf_counter() - started) * 1000
             response.headers[request_id_header] = request_id
             metrics.record(response.status_code, latency_ms)
+            if audit_logger is not None and request.url.path not in {"/health", "/health/ready"}:
+                audit_logger.append(
+                    {
+                        "request_id": request_id,
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status_code": response.status_code,
+                        "principal": principal_name,
+                        "role": principal_role,
+                        "client": request.client.host if request.client else "unknown",
+                    }
+                )
             return response
 
-        protected = request.url.path != "/health"
-        if config.security.enabled and protected:
+        required_role = required_role_for(request)
+        if config.security.enabled and required_role is not None:
             provided = request.headers.get(config.security.api_key_header)
-            if not config.security.api_key or provided != config.security.api_key:
+            principal = get_principal(provided)
+            if principal is None:
                 return finalize(JSONResponse(status_code=401, content={"detail": "Unauthorized"}))
+            principal_name, principal_role = principal
+            if role_levels[principal_role] < role_levels[required_role]:
+                return finalize(JSONResponse(status_code=403, content={"detail": "Forbidden"}))
 
         if rate_limiter is not None and request.url.path not in {"/health", "/metrics"}:
             client_host = request.client.host if request.client else "unknown"
@@ -93,6 +139,12 @@ def create_app(
         @app.get("/metrics")
         def get_metrics() -> PlainTextResponse:
             return PlainTextResponse(metrics.render_prometheus())
+
+    @app.get("/api/audit")
+    def get_audit_events(limit: int = 100) -> dict:
+        if audit_logger is None:
+            return {"items": []}
+        return {"items": audit_logger.read_recent(limit=limit)}
 
     @app.get("/dashboard")
     def dashboard() -> HTMLResponse:

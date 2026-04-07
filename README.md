@@ -13,6 +13,7 @@
 - 研究、课程、技能、讲解、练习、进度六类 agent
 - 可通过 `config/llm.yaml` 扩展到真实模型提供商
 - 支持可选 admin API key、基础限流、`/metrics` 和请求 ID
+- 支持角色化 API token、审计日志和运维接口保护
 - 默认支持 SiliconFlow，且在无可用 API Key 时自动回退到本地 deterministic 模式
 
 ## 项目结构
@@ -90,6 +91,7 @@ http://127.0.0.1:8000/dashboard
 - `GET /health/ready`
 - `GET /metrics`
 - `GET /api/config`
+- `GET /api/audit`
 - `GET /api/sessions`
 - `POST /api/sessions`
 - `GET /api/sessions/{session_id}`
@@ -106,7 +108,8 @@ http://127.0.0.1:8000/dashboard
 
 `GET /api/config` 会返回当前默认 provider、默认 profile，以及 `llm_available`，用于判断当前是否会走真实模型。
 
-如果启用了 `security.enabled=true`，除 `GET /health` 之外的接口都需要携带 `X-Admin-Key`。
+如果启用了 `security.enabled=true`，除 `GET /health`、`GET /health/ready`、`GET /dashboard` 之外的接口都需要携带 `X-Admin-Key`。
+可以继续使用单个共享 key，也可以配置 `viewer / operator / admin` 三类 token。
 如果启用了 `rate_limit.enabled=true`，服务会按进程内窗口做基础限流。
 
 ## API 示例
@@ -266,6 +269,8 @@ docker build -t learn-new:local .
 - 已实现基础间隔复习和显式 review 回合入口，连续低分会切到 remedial 教学模式
 - 已实现 timeline/summary 可观察性接口，前端可以直接读取 session 概览、掌握度和事件流
 - 已实现基础 admin API key 鉴权、进程内限流、`/metrics` 指标和 request id 响应头
+- 已实现角色化 token 访问控制，`viewer` 只读，`operator` 可写业务接口，`admin` 额外拥有 `/metrics` 与 `/api/audit`
+- 已实现 JSONL 审计日志落盘与 `/api/audit` 最近记录查询
 - 已实现 checkpoint 列表与恢复接口，可从 `.learn/checkpoints` 显式回滚 session 状态
 - 已实现 session export 接口，可导出 summary、timeline、checkpoint 和核心工件
 - 已实现 session index 接口，前端仪表盘可以直接列出全部学习会话

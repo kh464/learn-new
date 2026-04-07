@@ -92,6 +92,30 @@ security:
   api_key: ${LEARN_NEW_ADMIN_KEY}
 ```
 
+For role-based access, prefer `principals` over a single shared key:
+
+```yaml
+security:
+  enabled: true
+  api_key_header: X-Admin-Key
+  principals:
+    - name: viewer
+      api_key: ${LEARN_NEW_VIEWER_KEY}
+      role: viewer
+    - name: operator
+      api_key: ${LEARN_NEW_OPERATOR_KEY}
+      role: operator
+    - name: admin
+      api_key: ${LEARN_NEW_ADMIN_KEY}
+      role: admin
+```
+
+Role behavior:
+
+- `viewer`: read-only API access
+- `operator`: read + write learning APIs
+- `admin`: read + write + operational APIs such as `/metrics` and `/api/audit`
+
 Send the header on protected requests:
 
 ```powershell
@@ -123,7 +147,10 @@ Every response gets the header configured by `observability.request_id_header`.
 observability:
   metrics_enabled: true
   request_id_header: X-Request-ID
+  audit_log_path: .learn/audit/events.jsonl
 ```
+
+`/api/audit` returns recent audit entries when accessed with an admin token.
 
 ## Sandbox backend
 

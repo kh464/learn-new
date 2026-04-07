@@ -59,6 +59,18 @@ security:
   enabled: false
   api_key_header: X-Admin-Key
   api_key: ${LEARN_NEW_ADMIN_KEY}
+  principals: []
+  # Example:
+  # principals:
+  #   - name: viewer
+  #     api_key: ${LEARN_NEW_VIEWER_KEY}
+  #     role: viewer
+  #   - name: operator
+  #     api_key: ${LEARN_NEW_OPERATOR_KEY}
+  #     role: operator
+  #   - name: admin
+  #     api_key: ${LEARN_NEW_ADMIN_KEY}
+  #     role: admin
 
 rate_limit:
   enabled: false
@@ -68,6 +80,7 @@ rate_limit:
 observability:
   metrics_enabled: true
   request_id_header: X-Request-ID
+  audit_log_path: .learn/audit/events.jsonl
 
 sandbox:
   backend: local

@@ -40,6 +40,7 @@ class SecuritySettings(BaseModel):
     enabled: bool = False
     api_key_header: str = "X-Admin-Key"
     api_key: str | None = None
+    principals: list["SecurityPrincipal"] = Field(default_factory=list)
 
 
 class RateLimitSettings(BaseModel):
@@ -51,6 +52,7 @@ class RateLimitSettings(BaseModel):
 class ObservabilitySettings(BaseModel):
     metrics_enabled: bool = True
     request_id_header: str = "X-Request-ID"
+    audit_log_path: str | None = ".learn/audit/events.jsonl"
 
 
 class SandboxSettings(BaseModel):
@@ -59,6 +61,12 @@ class SandboxSettings(BaseModel):
     docker_image: str = "python:3.12-slim"
     memory_mb: int = 256
     cpu_limit: float = 1.0
+
+
+class SecurityPrincipal(BaseModel):
+    name: str
+    api_key: str
+    role: Literal["viewer", "operator", "admin"] = "viewer"
 
 
 class AppConfig(BaseModel):

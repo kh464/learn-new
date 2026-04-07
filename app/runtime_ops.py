@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+import json
 from threading import Lock
 from time import time
+from pathlib import Path
 
 
 class InMemoryRateLimiter:
@@ -52,3 +54,24 @@ class MetricsRegistry:
             for status_code, count in sorted(self.status_counts.items()):
                 lines.append(f'learn_new_requests_by_status_total{{status="{status_code}"}} {count}')
         return "\n".join(lines) + "\n"
+
+
+class AuditLogger:
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = Lock()
+
+    def append(self, payload: dict) -> None:
+        line = json.dumps(payload, ensure_ascii=False)
+        with self._lock:
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+
+    def read_recent(self, limit: int = 100) -> list[dict]:
+        if not self.path.exists():
+            return []
+        with self._lock:
+            lines = self.path.read_text(encoding="utf-8").splitlines()
+        items = [json.loads(line) for line in lines if line.strip()]
+        return items[-limit:][::-1]
