@@ -88,3 +88,5 @@ tasks:
   worker_threads: 1
   max_queue_size: 100
   max_attempts: 3
+  lease_seconds: 30
+  poll_interval_seconds: 0.1

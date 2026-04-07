@@ -81,13 +81,18 @@ def create_app(
             "worker_threads": config.tasks.worker_threads,
             "max_queue_size": config.tasks.max_queue_size,
             "max_attempts": config.tasks.max_attempts,
+            "lease_seconds": config.tasks.lease_seconds,
+            "poll_interval_seconds": config.tasks.poll_interval_seconds,
             "on_update": lambda record: event_broker.publish(f"task:{record['task_id']}", record),
             "handlers": task_handlers,
         }
         if config.tasks.backend == "sqlite":
+            sqlite_queue_kwargs = dict(task_queue_kwargs)
+            sqlite_queue_kwargs.pop("lease_seconds", None)
+            sqlite_queue_kwargs.pop("poll_interval_seconds", None)
             task_queue = SQLiteTaskQueue(
                 path=Path(config.tasks.sqlite_path or Path(workspace_root) / "tasks.db"),
-                **task_queue_kwargs,
+                **sqlite_queue_kwargs,
             )
         elif config.tasks.backend == "postgres":
             task_queue = PostgresTaskQueue(
@@ -95,7 +100,10 @@ def create_app(
                 **task_queue_kwargs,
             )
         else:
-            task_queue = InMemoryTaskQueue(**task_queue_kwargs)
+            memory_queue_kwargs = dict(task_queue_kwargs)
+            memory_queue_kwargs.pop("lease_seconds", None)
+            memory_queue_kwargs.pop("poll_interval_seconds", None)
+            task_queue = InMemoryTaskQueue(**memory_queue_kwargs)
     rate_limiter = None
     if config.rate_limit.enabled:
         if config.rate_limit.backend == "redis":

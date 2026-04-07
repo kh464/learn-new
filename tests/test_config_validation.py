@@ -176,3 +176,39 @@ def test_task_queue_postgres_requires_dsn_when_storage_is_not_postgres(tmp_path:
 
     with pytest.raises(ValidationError):
         load_config(config_path)
+
+
+def test_task_queue_lease_settings_must_be_positive(tmp_path: Path) -> None:
+    config_path = tmp_path / "llm.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "llm:",
+                "  default_provider: siliconflow",
+                "  default_profile: chat",
+                "  providers:",
+                "    siliconflow:",
+                "      enabled: true",
+                "      base_url: https://api.siliconflow.cn/v1",
+                "      api_key:",
+                "      models:",
+                "        chat: Qwen/Qwen2.5-7B-Instruct",
+                "  routing:",
+                "    profiles:",
+                "      chat:",
+                "        provider: siliconflow",
+                "        model: Qwen/Qwen2.5-7B-Instruct",
+                "tasks:",
+                "  enabled: true",
+                "  backend: postgres",
+                "  postgres_dsn: postgresql://learn-new:secret@db/learn_new",
+                "  lease_seconds: 0",
+                "  poll_interval_seconds: 0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_config(config_path)

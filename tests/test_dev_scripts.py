@@ -65,6 +65,10 @@ def test_helm_chart_templates_exist() -> None:
     pdb = Path("ops/helm/learn-new/templates/pdb.yaml").read_text(encoding="utf-8")
     configmap = Path("ops/helm/learn-new/templates/configmap.yaml").read_text(encoding="utf-8")
     secret = Path("ops/helm/learn-new/templates/secret.yaml").read_text(encoding="utf-8")
+    serviceaccount = Path("ops/helm/learn-new/templates/serviceaccount.yaml").read_text(encoding="utf-8")
+    role = Path("ops/helm/learn-new/templates/role.yaml").read_text(encoding="utf-8")
+    rolebinding = Path("ops/helm/learn-new/templates/rolebinding.yaml").read_text(encoding="utf-8")
+    networkpolicy = Path("ops/helm/learn-new/templates/networkpolicy.yaml").read_text(encoding="utf-8")
 
     assert "apiVersion: v2" in chart
     assert "image:" in values
@@ -75,3 +79,7 @@ def test_helm_chart_templates_exist() -> None:
     assert "kind: PodDisruptionBudget" in pdb
     assert "kind: ConfigMap" in configmap
     assert "kind: Secret" in secret
+    assert "kind: ServiceAccount" in serviceaccount
+    assert "kind: Role" in role
+    assert "kind: RoleBinding" in rolebinding
+    assert "kind: NetworkPolicy" in networkpolicy

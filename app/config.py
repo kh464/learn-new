@@ -153,6 +153,8 @@ class TaskQueueSettings(BaseModel):
     worker_threads: int = 1
     max_queue_size: int = 100
     max_attempts: int = 1
+    lease_seconds: int = 30
+    poll_interval_seconds: float = 0.1
     sqlite_path: str | None = None
     postgres_dsn: str | None = None
 
@@ -164,6 +166,10 @@ class TaskQueueSettings(BaseModel):
             raise ValueError("tasks.max_queue_size must be at least 1")
         if self.max_attempts < 1:
             raise ValueError("tasks.max_attempts must be at least 1")
+        if self.lease_seconds < 1:
+            raise ValueError("tasks.lease_seconds must be at least 1")
+        if self.poll_interval_seconds <= 0:
+            raise ValueError("tasks.poll_interval_seconds must be greater than 0")
         if self.backend == "sqlite" and not self.sqlite_path:
             self.sqlite_path = ".learn/tasks.db"
         return self

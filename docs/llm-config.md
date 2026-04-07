@@ -210,6 +210,8 @@ tasks:
   worker_threads: 1
   max_queue_size: 100
   max_attempts: 3
+  lease_seconds: 30
+  poll_interval_seconds: 0.1
   postgres_dsn: ${LEARN_NEW_POSTGRES_DSN}
 ```
 
@@ -220,6 +222,8 @@ With `backend=sqlite`, task metadata and final results persist across restarts.
 With `backend=postgres`, the queue state is shared through PostgreSQL and can reuse `storage.postgres_dsn` when `tasks.postgres_dsn` is omitted.
 The PostgreSQL backend uses lease-based task claiming so an abandoned running task can be reclaimed by another worker after the lease expires.
 `tasks.max_attempts` controls how many times a failed background job is retried before it is marked failed permanently.
+`tasks.lease_seconds` controls how long a worker owns a claimed PostgreSQL task before another worker may reclaim it.
+`tasks.poll_interval_seconds` controls how often an idle PostgreSQL worker polls for claimable tasks.
 
 ## External knowledge import
 
@@ -241,7 +245,7 @@ The repository also includes:
 - `ops/k8s/` with starter `Deployment`, `Service`, and `Ingress` manifests
 - `ops/helm/learn-new/` with a starter Helm chart
 
-The Helm chart includes parameterized `Deployment`, `Service`, `Ingress`, `ConfigMap`, `Secret`, `HorizontalPodAutoscaler`, and `PodDisruptionBudget` templates, plus probe/resource/securityContext settings in `values.yaml`.
+The Helm chart includes parameterized `Deployment`, `Service`, `Ingress`, `ConfigMap`, `Secret`, `HorizontalPodAutoscaler`, `PodDisruptionBudget`, `ServiceAccount`, `Role`, `RoleBinding`, and `NetworkPolicy` templates, plus probe/resource/securityContext settings in `values.yaml`.
 
 ## Sandbox backend
 

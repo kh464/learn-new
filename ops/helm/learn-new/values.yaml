@@ -50,6 +50,18 @@ env:
   LEARN_NEW_CONFIG_PATH: /app/config/llm.production.yaml
   LEARN_NEW_SECRET_DIR: /app/secrets
 
+serviceAccount:
+  create: true
+  name: ""
+
+rbac:
+  create: true
+
+networkPolicy:
+  enabled: true
+  allowIngressFrom: []
+  allowEgressTo: []
+
 secret:
   create: true
   name: ""

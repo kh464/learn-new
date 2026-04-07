@@ -351,12 +351,13 @@ docker build -t learn-new:local .
 - 已补充内存型异步 task queue 和后台 worker，可把 turn 执行从请求线程移到后台并按 owner 隔离任务查询
 - 已补充可切换的 SQLite 持久化任务队列后端，任务状态可跨进程重启保留，并支持有限次自动重试
 - 已补充可切换的 PostgreSQL 持久化任务队列后端，适合和多实例共享同一任务账本，并支持租约过期后的任务重抢占
+- PostgreSQL 任务队列的租约时长与轮询间隔现已配置化，可按环境调优 worker 抢占与恢复节奏
 - 已补充任务状态 WebSocket 推送接口，后台任务可流式返回状态变化
 - 已补充 `docker-compose.observability.yml`、Prometheus 抓取配置和 Grafana datasource provisioning
 - 已补充 trace id 透传和 Prometheus alert rules 模板
 - 已补充 Caddy 反向代理模板和 K8s deployment/service/ingress 清单
 - 已补充 URL 抓取式外部知识导入，并带 `http/https` 护栏和幂等去重
-- 已补充 Helm chart 模板，并覆盖 ConfigMap、Secret、HPA、PDB、探针、resources 和 secret 挂载参数
+- 已补充 Helm chart 模板，并覆盖 ConfigMap、Secret、HPA、PDB、ServiceAccount、RBAC、NetworkPolicy、探针、resources 和 secret 挂载参数
 - 已补充基础备份与恢复脚本，带 manifest 校验与显式 `-Force` 护栏，便于单节点灾备和本地恢复
 
 后续扩展优先级建议：

@@ -342,9 +342,10 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
 
     def _emit(self, record: dict) -> None:
         with self._lock:
-            source = self._tasks.get(record["task_id"])
-            if source is not None:
-                self._persist_record(source)
+            source = dict(self._tasks.get(record["task_id"], {}))
+            source.update(record)
+            self._tasks[record["task_id"]] = source
+            self._persist_record(source)
         super()._emit(record)
 
     def _persist_record(self, record: dict) -> None:
@@ -395,6 +396,8 @@ class PostgresTaskQueue(InMemoryTaskQueue):
         worker_threads: int = 1,
         max_queue_size: int = 100,
         max_attempts: int = 1,
+        lease_seconds: int = 30,
+        poll_interval_seconds: float = 0.1,
         on_update: Callable[[dict], None] | None = None,
         handlers: dict[str, TaskHandler] | None = None,
         connect_factory: Callable[[str], object] | None = None,
@@ -402,8 +405,8 @@ class PostgresTaskQueue(InMemoryTaskQueue):
         self.dsn = dsn
         self.connect_factory = connect_factory or self._default_connect_factory()
         self.worker_id = uuid4().hex
-        self.lease_seconds = 30
-        self.poll_interval_seconds = 0.1
+        self.lease_seconds = lease_seconds
+        self.poll_interval_seconds = poll_interval_seconds
         super().__init__(
             worker_threads=worker_threads,
             max_queue_size=max_queue_size,
@@ -729,9 +732,10 @@ class PostgresTaskQueue(InMemoryTaskQueue):
 
     def _emit(self, record: dict) -> None:
         with self._lock:
-            source = self._tasks.get(record["task_id"])
-            if source is not None:
-                self._persist_record(source)
+            source = dict(self._tasks.get(record["task_id"], {}))
+            source.update(record)
+            self._tasks[record["task_id"]] = source
+            self._persist_record(source)
         super()._emit(record)
 
     def _persist_record(self, record: dict) -> None:
