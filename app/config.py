@@ -53,6 +53,14 @@ class ObservabilitySettings(BaseModel):
     request_id_header: str = "X-Request-ID"
 
 
+class SandboxSettings(BaseModel):
+    backend: Literal["local", "docker"] = "local"
+    timeout_seconds: int = 10
+    docker_image: str = "python:3.12-slim"
+    memory_mb: int = 256
+    cpu_limit: float = 1.0
+
+
 class AppConfig(BaseModel):
     version: int = 1
     llm: LLMSettings
@@ -60,6 +68,7 @@ class AppConfig(BaseModel):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
+    sandbox: SandboxSettings = Field(default_factory=SandboxSettings)
 
 
 def load_config(path: Path | str = "config/llm.yaml") -> AppConfig:

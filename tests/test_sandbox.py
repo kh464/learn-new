@@ -1,4 +1,6 @@
-from app.sandbox import PythonSandbox
+import subprocess
+
+from app.sandbox import DockerPythonSandbox, PythonSandbox
 
 
 def test_python_sandbox_executes_code_and_reports_success() -> None:
@@ -33,3 +35,48 @@ def test_python_sandbox_reports_failure() -> None:
 
     assert result.passed is False
     assert "AssertionError" in result.stderr
+
+
+def test_docker_python_sandbox_uses_isolated_container_flags() -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    sandbox = DockerPythonSandbox(
+        timeout_seconds=5,
+        image="python:3.12-alpine",
+        memory_mb=128,
+        cpu_limit=0.5,
+        command_runner=fake_run,
+    )
+    result = sandbox.run(
+        user_code="def add(a, b):\n    return a + b\n",
+        test_code="assert add(2, 3) == 5\nprint('ok')\n",
+    )
+
+    assert result.passed is True
+    assert commands
+    command = commands[0]
+    assert command[:4] == ["docker", "run", "--rm", "--network"]
+    assert "none" in command
+    assert "--read-only" in command
+    assert "--memory" in command
+    assert "128m" in command
+    assert "--cpus" in command
+    assert "0.5" in command
+
+
+def test_docker_python_sandbox_reports_missing_docker_binary() -> None:
+    def fake_run(command, **kwargs):
+        raise FileNotFoundError("docker")
+
+    sandbox = DockerPythonSandbox(command_runner=fake_run)
+    result = sandbox.run(
+        user_code="print('hi')\n",
+        test_code="print('ok')\n",
+    )
+
+    assert result.passed is False
+    assert "Docker executable not found" in result.stderr

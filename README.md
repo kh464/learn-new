@@ -9,7 +9,7 @@
 - 本地 `.learn/` 文件系统持久化
 - 可选 SQLite 会话状态与 checkpoint 元数据存储
 - 本地知识上传、分块检索和轻量 RAG
-- 本地 Python 沙箱执行与代码练习评估
+- 可选本地 / Docker 隔离 Python 沙箱执行与代码练习评估
 - 研究、课程、技能、讲解、练习、进度六类 agent
 - 可通过 `config/llm.yaml` 扩展到真实模型提供商
 - 支持可选 admin API key、基础限流、`/metrics` 和请求 ID
@@ -87,6 +87,7 @@ http://127.0.0.1:8000/dashboard
 
 - `GET /dashboard`
 - `GET /health`
+- `GET /health/ready`
 - `GET /metrics`
 - `GET /api/config`
 - `GET /api/sessions`
@@ -234,6 +235,18 @@ Invoke-RestMethod `
 .\scripts\test.ps1
 ```
 
+备份工作区：
+
+```powershell
+.\scripts\backup.ps1
+```
+
+恢复工作区：
+
+```powershell
+.\scripts\restore.ps1 -ArchivePath .\backups\learn-new-backup-YYYYMMDD-HHMMSS.zip
+```
+
 构建生产镜像：
 
 ```powershell
@@ -247,7 +260,8 @@ docker build -t learn-new:local .
 - 默认使用确定性本地 agent 逻辑，避免没有外部服务时项目无法运行
 - 已接入 `config/llm.yaml` 和真实 LLM 网关；当 SiliconFlow key 可用时，`Researcher`、`Instructor`、`Practice` 会优先调用真实模型
 - 仍以本地文件系统为主，但已支持可选 SQLite 会话元数据存储，便于向正式数据库演进
-- 使用本地轻量 Python 沙箱代替 E2B/Docker，适合开发期验证，不是生产级隔离
+- 默认使用本地轻量 Python 沙箱，适合开发期验证，不是完整生产级隔离
+- 已支持可切换 Docker 沙箱后端，可用 `sandbox.backend=docker` 启用容器隔离练习执行
 - 用 LangGraph 保留父 agent 主控和阶段流转结构
 - 已实现基础间隔复习和显式 review 回合入口，连续低分会切到 remedial 教学模式
 - 已实现 timeline/summary 可观察性接口，前端可以直接读取 session 概览、掌握度和事件流
@@ -257,6 +271,7 @@ docker build -t learn-new:local .
 - 已实现 session index 接口，前端仪表盘可以直接列出全部学习会话
 - 已实现轻量 dashboard 页面，可直接消费现有 API 展示 session list、summary、timeline、lesson、practice、latest feedback、due review queue、knowledge search、export preview，并支持创建 session、上传知识、检索知识、提交回答、启动 review、恢复 checkpoint、预览导出、导出 session
 - 已补充 `Dockerfile`、`.dockerignore`、`docker-compose.yml` 作为单节点部署底座
+- 已补充基础备份与恢复脚本，便于单节点灾备和本地恢复
 
 后续扩展优先级建议：
 

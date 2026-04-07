@@ -68,3 +68,10 @@ rate_limit:
 observability:
   metrics_enabled: true
   request_id_header: X-Request-ID
+
+sandbox:
+  backend: local
+  timeout_seconds: 10
+  docker_image: python:3.12-slim
+  memory_mb: 256
+  cpu_limit: 1.0

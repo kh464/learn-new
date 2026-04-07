@@ -56,6 +56,7 @@ def test_dashboard_page_is_served_and_references_core_apis(tmp_path: Path) -> No
     assert "Latest Feedback" in response.text
     assert "domain-input" in response.text
     assert "goal-input" in response.text
+    assert "admin-key-input" in response.text
     assert "knowledge-title-input" in response.text
     assert "knowledge-content-input" in response.text
     assert "knowledge-source-input" in response.text
@@ -65,6 +66,7 @@ def test_dashboard_page_is_served_and_references_core_apis(tmp_path: Path) -> No
     assert "load-export-preview" in response.text
     assert "export-preview" in response.text
     assert "latest-feedback" in response.text
+    assert "X-Admin-Key" in response.text
     assert "Submit Turn" in response.text
     assert "answer-input" in response.text
     assert "Python async programming" in response.text

@@ -15,7 +15,7 @@ from app.agents.skillforge import SkillForgeAgent
 from app.llm import LLMGateway
 from app.models import LearnerProfile, LearnerState
 from app.session_store import SQLiteSessionStore
-from app.sandbox import PythonSandbox
+from app.sandbox import build_sandbox
 from app.workspace import WorkspaceManager
 
 
@@ -33,7 +33,7 @@ class LearningOrchestrator:
         self.curriculum = CurriculumArchitectAgent()
         self.skillforge = SkillForgeAgent()
         self.instructor = InstructorAgent(llm=self.llm)
-        self.practice = PracticeEvaluatorAgent(llm=self.llm, sandbox=PythonSandbox())
+        self.practice = PracticeEvaluatorAgent(llm=self.llm, sandbox=build_sandbox(config))
         self.progress = ProgressMonitorAgent()
         self.graph = self._build_graph()
 

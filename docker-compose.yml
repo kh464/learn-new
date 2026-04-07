@@ -11,6 +11,8 @@ services:
       LEARN_NEW_ADMIN_KEY: ${LEARN_NEW_ADMIN_KEY:-}
     volumes:
       - learn_new_workspace:/app/.learn
+      # Enable this mount if you switch sandbox.backend to docker inside the container.
+      # - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
 volumes:

@@ -338,6 +338,12 @@ def render_dashboard() -> HTMLResponse:
         <h1>Session Index</h1>
         <p class="subtle">Reads <code>/api/sessions</code> and turns the existing APIs into a lightweight control room.</p>
       </header>
+      <div class="create-form">
+        <div class="field">
+          <label for="admin-key-input">Admin Key</label>
+          <input id="admin-key-input" name="admin-key" placeholder="Optional X-Admin-Key" />
+        </div>
+      </div>
       <form id="create-session-form" class="create-form">
         <div class="field">
           <label for="domain-input">Domain</label>
@@ -490,6 +496,7 @@ def render_dashboard() -> HTMLResponse:
 
     const sessionList = document.getElementById('session-list');
     const createSessionForm = document.getElementById('create-session-form');
+    const adminKeyInput = document.getElementById('admin-key-input');
     const domainInput = document.getElementById('domain-input');
     const goalInput = document.getElementById('goal-input');
     const hero = document.getElementById('hero');
@@ -519,14 +526,45 @@ def render_dashboard() -> HTMLResponse:
     const startReviewButton = document.getElementById('start-review');
     const refreshButton = document.getElementById('refresh-data');
     const exportButton = document.getElementById('export-session');
+    const adminHeaderName = 'X-Admin-Key';
+
+    const storedAdminKey = window.localStorage.getItem('learn-new.admin-key') || '';
+    adminKeyInput.value = storedAdminKey;
+    adminKeyInput.addEventListener('change', () => {
+      window.localStorage.setItem('learn-new.admin-key', adminKeyInput.value.trim());
+      setStatus('Updated admin key for API requests.');
+    });
 
     async function fetchJson(path, options) {
-      const response = await fetch(path, options);
+      const requestOptions = { ...(options || {}) };
+      const headers = new Headers(requestOptions.headers || {});
+      const adminKey = adminKeyInput.value.trim();
+      if (adminKey) {
+        headers.set(adminHeaderName, adminKey);
+      }
+      requestOptions.headers = headers;
+      const response = await fetch(path, requestOptions);
       if (!response.ok) {
         const text = await response.text();
         throw new Error(`${path} -> ${response.status} ${text}`);
       }
       return response.json();
+    }
+
+    async function fetchText(path, options) {
+      const requestOptions = { ...(options || {}) };
+      const headers = new Headers(requestOptions.headers || {});
+      const adminKey = adminKeyInput.value.trim();
+      if (adminKey) {
+        headers.set(adminHeaderName, adminKey);
+      }
+      requestOptions.headers = headers;
+      const response = await fetch(path, requestOptions);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`${path} -> ${response.status} ${text}`);
+      }
+      return response.text();
     }
 
     function setStatus(message) {
@@ -836,9 +874,15 @@ def render_dashboard() -> HTMLResponse:
       setStatus('Export preview loaded.');
     }
 
-    function openExport() {
+    async function openExport() {
       if (!state.activeSessionId) return;
-      window.open(`/api/sessions/${state.activeSessionId}/export`, '_blank');
+      setStatus('Opening export JSON...');
+      const payload = await fetchText(`/api/sessions/${state.activeSessionId}/export`);
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setStatus('Opened export JSON.');
     }
 
     startReviewButton.addEventListener('click', () => {
@@ -893,7 +937,9 @@ def render_dashboard() -> HTMLResponse:
       loadSession(state.activeSessionId).catch((error) => setStatus(`Refresh failed: ${error.message}`));
     });
 
-    exportButton.addEventListener('click', openExport);
+    exportButton.addEventListener('click', () => {
+      openExport().catch((error) => setStatus(`Open Export JSON failed: ${error.message}`));
+    });
     loadExportPreviewButton.addEventListener('click', () => {
       loadExportPreview().catch((error) => setStatus(`Load Export Preview failed: ${error.message}`));
     });

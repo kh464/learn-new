@@ -19,6 +19,7 @@ The project uses `config/llm.yaml` as the runtime configuration file.
 5. `security` for admin API key protection
 6. `rate_limit` for in-process request throttling
 7. `observability` for request id and metrics behavior
+8. `sandbox` for practice execution isolation
 
 ## How to set the API key
 
@@ -123,3 +124,29 @@ observability:
   metrics_enabled: true
   request_id_header: X-Request-ID
 ```
+
+## Sandbox backend
+
+Local development default:
+
+```yaml
+sandbox:
+  backend: local
+  timeout_seconds: 10
+  docker_image: python:3.12-slim
+  memory_mb: 256
+  cpu_limit: 1.0
+```
+
+Docker-isolated execution:
+
+```yaml
+sandbox:
+  backend: docker
+  timeout_seconds: 10
+  docker_image: python:3.12-slim
+  memory_mb: 256
+  cpu_limit: 1.0
+```
+
+When `backend=docker`, the practice evaluator runs Python code inside an ephemeral container with `--network none`, `--read-only`, CPU limits, and memory limits.

@@ -78,6 +78,17 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/health/ready")
+    def health_ready() -> dict[str, str | bool]:
+        return {
+            "status": "ok",
+            "storage_backend": config.storage.backend,
+            "sandbox_backend": config.sandbox.backend,
+            "metrics_enabled": config.observability.metrics_enabled,
+            "security_enabled": config.security.enabled,
+            "rate_limit_enabled": config.rate_limit.enabled,
+        }
+
     if config.observability.metrics_enabled:
         @app.get("/metrics")
         def get_metrics() -> PlainTextResponse:

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from app.llm import LLMGateway
 from app.models import LearnerState, PracticeArtifact
-from app.sandbox import PythonSandbox
+from app.sandbox import CodeSandbox, PythonSandbox
 from app.workspace import WorkspaceManager
 
 
 class PracticeEvaluatorAgent:
-    def __init__(self, llm: LLMGateway | None = None, sandbox: PythonSandbox | None = None) -> None:
+    def __init__(self, llm: LLMGateway | None = None, sandbox: CodeSandbox | None = None) -> None:
         self.llm = llm
         self.sandbox = sandbox or PythonSandbox()
 
