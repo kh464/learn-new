@@ -130,6 +130,19 @@ def render_dashboard() -> HTMLResponse:
             </div>
           </article>
 
+          <article class="panel section-card">
+            <div class="section-heading">
+              <p class="eyebrow">Recovery</p>
+              <h2>Dead Letter Queue</h2>
+            </div>
+            <div class="action-row">
+              <button id="refresh-dead-letter" class="action secondary" type="button">Refresh Dead Letter Queue</button>
+            </div>
+            <div id="dead-letter-list" class="result-stack">
+              <div class="empty">No failed tasks loaded.</div>
+            </div>
+          </article>
+
           <article class="panel section-card" id="knowledge-pipeline">
             <div class="section-heading">
               <p class="eyebrow">Knowledge</p>

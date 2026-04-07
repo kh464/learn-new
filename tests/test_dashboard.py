@@ -60,6 +60,7 @@ def test_dashboard_page_serves_modern_app_shell_and_frontend_entrypoints(tmp_pat
     assert 'src="/static/dashboard.js"' in response.text
     assert "Learning Operations Center" in response.text
     assert "Async Task Console" in response.text
+    assert "Dead Letter Queue" in response.text
     assert "Runtime Pulse" in response.text
     assert "Knowledge Pipeline" in response.text
     assert "Session Workspace" in response.text
@@ -77,6 +78,7 @@ def test_dashboard_page_serves_modern_app_shell_and_frontend_entrypoints(tmp_pat
     assert "knowledge-query-input" in response.text
     assert "task-answer-input" in response.text
     assert "task-stream-status" in response.text
+    assert "dead-letter-list" in response.text
     assert "runtime-summary-panel" in response.text
     assert "config-summary-panel" in response.text
     assert "session-files-panel" in response.text
@@ -113,7 +115,9 @@ def test_dashboard_static_assets_reference_async_task_and_runtime_apis(tmp_path:
     assert "javascript" in js.headers["content-type"]
     assert "/api/sessions" in js.text
     assert "/api/tasks/turns" in js.text
+    assert "/api/tasks/dead-letter" in js.text
     assert "/ws/tasks/" in js.text
+    assert "/requeue" in js.text
     assert "/api/runtime/summary" in js.text
     assert "/api/config" in js.text
     assert "/api/audit" in js.text

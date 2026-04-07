@@ -61,6 +61,7 @@ class InMemoryTaskQueue:
         owner_id: str,
         payload: dict | None = None,
         runner: Callable[[], dict] | None = None,
+        max_attempts_override: int | None = None,
     ) -> dict:
         self.start()
         task_id = uuid4().hex
@@ -77,7 +78,7 @@ class InMemoryTaskQueue:
             "started_at": None,
             "completed_at": None,
             "attempt_count": 0,
-            "max_attempts": self.max_attempts,
+            "max_attempts": max_attempts_override or self.max_attempts,
             "runner": runner,
         }
         with self._lock:
@@ -107,6 +108,42 @@ class InMemoryTaskQueue:
                 return record
             sleep(0.05)
         raise TimeoutError(task_id)
+
+    def list_tasks(self, *, status: str | None = None, limit: int = 100, owner_id: str | None = None) -> list[dict]:
+        with self._lock:
+            items = list(self._tasks.values())
+        filtered = []
+        for record in sorted(items, key=lambda item: item["created_at"], reverse=True):
+            if status is not None and record["status"] != status:
+                continue
+            if owner_id is not None and record["owner_id"] != owner_id:
+                continue
+            filtered.append(self._public_record(record))
+            if len(filtered) >= limit:
+                break
+        return filtered
+
+    def list_dead_letters(self, *, limit: int = 100, owner_id: str | None = None) -> list[dict]:
+        return self.list_tasks(status="failed", limit=limit, owner_id=owner_id)
+
+    def requeue(self, task_id: str) -> dict:
+        with self._lock:
+            source = self._tasks.get(task_id)
+            if source is None:
+                raise FileNotFoundError(task_id)
+            if source["status"] != "failed":
+                raise ValueError("Only failed tasks can be requeued")
+            payload = dict(source["payload"])
+            runner = source.get("runner")
+            max_attempts = int(source.get("max_attempts") or self.max_attempts)
+        return self.submit(
+            task_type=source["task_type"],
+            session_id=source["session_id"],
+            owner_id=source["owner_id"],
+            payload=payload,
+            runner=runner,
+            max_attempts_override=max_attempts,
+        )
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -316,6 +353,7 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
         owner_id: str,
         payload: dict | None = None,
         runner: Callable[[], dict] | None = None,
+        max_attempts_override: int | None = None,
     ) -> dict:
         task = super().submit(
             task_type=task_type,
@@ -323,6 +361,7 @@ class SQLiteTaskQueue(InMemoryTaskQueue):
             owner_id=owner_id,
             payload=payload,
             runner=runner,
+            max_attempts_override=max_attempts_override,
         )
         with self._lock:
             self._persist_record(self._tasks[task["task_id"]])
@@ -525,6 +564,7 @@ class PostgresTaskQueue(InMemoryTaskQueue):
         owner_id: str,
         payload: dict | None = None,
         runner: Callable[[], dict] | None = None,
+        max_attempts_override: int | None = None,
     ) -> dict:
         self.start()
         task_id = uuid4().hex
@@ -541,7 +581,7 @@ class PostgresTaskQueue(InMemoryTaskQueue):
             "started_at": None,
             "completed_at": None,
             "attempt_count": 0,
-            "max_attempts": self.max_attempts,
+            "max_attempts": max_attempts_override or self.max_attempts,
             "lease_owner": None,
             "lease_expires_at": None,
             "runner": runner,

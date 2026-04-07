@@ -115,3 +115,70 @@ def test_task_visibility_is_limited_to_owner_unless_admin(tmp_path: Path) -> Non
             if lookup.json()["status"] in {"completed", "failed"}:
                 break
             sleep(0.05)
+
+
+def test_failed_task_can_be_listed_from_dead_letter_queue_and_requeued(tmp_path: Path, monkeypatch) -> None:
+    config_path = tmp_path / "llm.yaml"
+    _write_task_config(config_path)
+    app = create_app(workspace_root=tmp_path / ".learn", config_path=config_path)
+    original_run_turn = app.state.orchestrator.run_turn
+    attempts = {"count": 0}
+
+    def fail_once(*args, **kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise RuntimeError("simulated task failure")
+        return original_run_turn(*args, **kwargs)
+
+    monkeypatch.setattr(app.state.orchestrator, "run_turn", fail_once)
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/sessions",
+            headers={"X-Admin-Key": "alice-key"},
+            json={"domain": "Python async programming", "goal": "Master async/await"},
+        )
+        session_id = created.json()["session_id"]
+
+        task_response = client.post(
+            "/api/tasks/turns",
+            headers={"X-Admin-Key": "alice-key"},
+            json={"session_id": session_id, "learner_answer": "first attempt should fail"},
+        )
+        failed_task_id = task_response.json()["task_id"]
+
+        failed_payload = None
+        for _ in range(40):
+            lookup = client.get(f"/api/tasks/{failed_task_id}", headers={"X-Admin-Key": "alice-key"})
+            failed_payload = lookup.json()
+            if failed_payload["status"] == "failed":
+                break
+            sleep(0.05)
+
+        assert failed_payload is not None
+        assert failed_payload["status"] == "failed"
+        assert "simulated task failure" in failed_payload["error"]
+
+        dead_letters = client.get("/api/tasks/dead-letter?limit=10", headers={"X-Admin-Key": "alice-key"})
+        assert dead_letters.status_code == 200
+        assert dead_letters.json()["items"][0]["task_id"] == failed_task_id
+
+        denied = client.post(f"/api/tasks/{failed_task_id}/requeue", headers={"X-Admin-Key": "bob-key"})
+        assert denied.status_code == 404
+
+        requeued = client.post(f"/api/tasks/{failed_task_id}/requeue", headers={"X-Admin-Key": "alice-key"})
+        assert requeued.status_code == 202
+        retried_task_id = requeued.json()["task_id"]
+        assert retried_task_id != failed_task_id
+
+        retried_payload = None
+        for _ in range(40):
+            lookup = client.get(f"/api/tasks/{retried_task_id}", headers={"X-Admin-Key": "alice-key"})
+            retried_payload = lookup.json()
+            if retried_payload["status"] == "completed":
+                break
+            sleep(0.05)
+
+        assert retried_payload is not None
+        assert retried_payload["status"] == "completed"
+        assert retried_payload["result"]["session_id"] == session_id

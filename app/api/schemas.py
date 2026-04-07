@@ -159,3 +159,7 @@ class TaskStatusResponse(BaseModel):
     attempt_count: int = 0
     max_attempts: int = 1
     result: StateResponse | None = None
+
+
+class TaskListResponse(BaseModel):
+    items: list[TaskStatusResponse]

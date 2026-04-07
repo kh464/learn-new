@@ -249,6 +249,8 @@ tasks:
 ```
 
 `POST /api/tasks/turns` enqueues a turn job, and `GET /api/tasks/{task_id}` returns queued/running/completed/failed status plus the final session state when complete.
+`GET /api/tasks/dead-letter` returns failed tasks that exhausted retries.
+`POST /api/tasks/{task_id}/requeue` clones a failed task back into the queue as a fresh task record.
 `WS /ws/tasks/{task_id}` streams live task status updates for the same task record.
 Task visibility follows the same owner isolation rules as session access.
 With `backend=sqlite`, task metadata and final results persist across restarts.

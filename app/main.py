@@ -25,6 +25,7 @@ from app.api.schemas import (
     SearchKnowledgeResponse,
     StateResponse,
     TaskAcceptedResponse,
+    TaskListResponse,
     TaskStatusResponse,
     TimelineResponse,
     TurnRequest,
@@ -467,6 +468,33 @@ def create_app(
         except TaskQueueFullError as exc:
             raise HTTPException(status_code=503, detail="Task queue full") from exc
         return TaskAcceptedResponse.model_validate(task)
+
+    @app.get("/api/tasks/dead-letter", response_model=TaskListResponse)
+    def list_dead_letter_tasks(request: Request, limit: int = 100) -> TaskListResponse:
+        if task_queue is None:
+            raise HTTPException(status_code=503, detail="Task queue disabled")
+        items = [
+            item
+            for item in task_queue.list_dead_letters(limit=limit)
+            if can_access_task(request.state.principal_name, request.state.principal_role, item["owner_id"])
+        ]
+        return TaskListResponse(items=[TaskStatusResponse.model_validate(item) for item in items])
+
+    @app.post("/api/tasks/{task_id}/requeue", response_model=TaskAcceptedResponse, status_code=202)
+    def requeue_task(task_id: str, request: Request) -> TaskAcceptedResponse:
+        if task_queue is None:
+            raise HTTPException(status_code=503, detail="Task queue disabled")
+        try:
+            task = task_queue.get(task_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Task not found") from exc
+        if not can_access_task(request.state.principal_name, request.state.principal_role, task["owner_id"]):
+            raise HTTPException(status_code=404, detail="Task not found")
+        try:
+            requeued = task_queue.requeue(task_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return TaskAcceptedResponse.model_validate(requeued)
 
     @app.get("/api/tasks/{task_id}", response_model=TaskStatusResponse)
     def get_task_status(task_id: str, request: Request) -> TaskStatusResponse:

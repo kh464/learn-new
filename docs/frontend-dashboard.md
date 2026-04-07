@@ -15,6 +15,9 @@
   - 调用 `POST /api/tasks/turns`
   - 优先通过 `WS /ws/tasks/{task_id}` 订阅任务状态
   - 如果 WebSocket 不可用，可回退到 `GET /api/tasks/{task_id}` 轮询
+- `Dead Letter Queue`
+  - 调用 `GET /api/tasks/dead-letter`
+  - 支持在页面内直接执行 `POST /api/tasks/{task_id}/requeue`
 - `Knowledge Pipeline`
   - 支持文本上传
   - 支持 `POST /api/sessions/{session_id}/knowledge/import-url` 导入 URL

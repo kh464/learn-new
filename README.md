@@ -126,6 +126,7 @@ http://127.0.0.1:8000/dashboard
 - 检索当前 session 已索引的知识片段
 - 提交 learner answer 推进一轮教学
 - 将 learner answer 以后台任务方式入队，并在页面内流式查看任务状态
+- 查看 dead-letter failed tasks，并从 dashboard 直接 requeue
 - 启动显式 review 回合
 - 查看当前到期复习队列
 - 查看当前 session 的 latest feedback
@@ -151,6 +152,8 @@ http://127.0.0.1:8000/dashboard
 - `GET /api/runtime/summary`
 - `POST /api/tasks/turns`
 - `GET /api/tasks/{task_id}`
+- `GET /api/tasks/dead-letter`
+- `POST /api/tasks/{task_id}/requeue`
 - `WS /ws/tasks/{task_id}`
 - `GET /api/sessions`
 - `POST /api/sessions`
@@ -173,6 +176,8 @@ http://127.0.0.1:8000/dashboard
 `GET /api/config` 会返回当前默认 provider、默认 profile、provider 列表、routing profile，以及 `llm_available`，用于判断当前是否会走真实模型。
 `GET /api/logs/app` 可供 admin 拉取最近结构化应用日志。
 `POST /api/tasks/turns` 可把一轮教学推进提交到后台 worker；随后用 `GET /api/tasks/{task_id}` 轮询状态和结果。
+`GET /api/tasks/dead-letter` 可列出已经耗尽重试次数的 failed tasks。
+`POST /api/tasks/{task_id}/requeue` 可把 failed task 复制为新的 queued task，再次进入 worker 队列。
 `WS /ws/tasks/{task_id}` 可流式接收后台任务的状态变化；dashboard 为了兼容浏览器环境，支持通过 query string 传递 `api_key` 连接该 WebSocket。
 `POST /api/sessions/{session_id}/knowledge/import-url` 可抓取外部 URL 文本并直接入库到当前 session 知识索引。
 URL 导入目前只接受 `http/https`，并按 `source + content` 指纹做幂等去重，重复导入不会重复写入 chunk。

@@ -10,6 +10,7 @@ const state = {
   activeExportPreview: null,
   activeTaskId: null,
   activeTaskEvents: [],
+  deadLetters: [],
   runtimeSummary: null,
   runtimeAudit: null,
   runtimeLogs: null,
@@ -35,6 +36,8 @@ const taskAnswerInput = document.getElementById("task-answer-input");
 const pollTaskStatusButton = document.getElementById("poll-task-status");
 const taskStreamStatus = document.getElementById("task-stream-status");
 const taskStream = document.getElementById("task-stream");
+const refreshDeadLetterButton = document.getElementById("refresh-dead-letter");
+const deadLetterList = document.getElementById("dead-letter-list");
 const refreshButton = document.getElementById("refresh-data");
 const startReviewButton = document.getElementById("start-review");
 const loadExportPreviewButton = document.getElementById("load-export-preview");
@@ -356,6 +359,33 @@ function renderTaskEvents() {
     .join("");
 }
 
+function renderDeadLetters() {
+  if (!state.deadLetters.length) {
+    deadLetterList.innerHTML = '<div class="empty">No failed tasks loaded.</div>';
+    return;
+  }
+  deadLetterList.innerHTML = state.deadLetters
+    .map(
+      (item) => `
+        <div class="result-card">
+          <div class="session-meta">
+            <strong>${escapeHtml(item.task_id)}</strong>
+            <button class="action ghost requeue-task" type="button" data-task-id="${escapeHtml(item.task_id)}">Requeue</button>
+          </div>
+          <div class="microcopy">${escapeHtml(item.status)} | attempts=${escapeHtml(item.attempt_count)}/${escapeHtml(item.max_attempts)}</div>
+          <div>${escapeHtml(item.error || "No error detail available.")}</div>
+        </div>
+      `
+    )
+    .join("");
+
+  for (const button of deadLetterList.querySelectorAll(".requeue-task")) {
+    button.addEventListener("click", () => {
+      requeueDeadLetter(button.dataset.taskId).catch((error) => setStatus(`Requeue task failed: ${error.message}`));
+    });
+  }
+}
+
 function renderRuntimeSummary(runtimeSummary, runtimeAudit, runtimeLogs) {
   const summary = runtimeSummary || state.runtimeSummary;
   if (!summary || summary.error) {
@@ -629,6 +659,29 @@ async function pollTaskStatus() {
   setStatus(`Polled task ${task.task_id}.`);
 }
 
+async function loadDeadLetters() {
+  state.deadLetters = [];
+  const payload = await tryFetchJson("/api/tasks/dead-letter?limit=10");
+  if (payload.error) {
+    deadLetterList.innerHTML = `<div class="empty">${escapeHtml(payload.error)}</div>`;
+    return;
+  }
+  state.deadLetters = payload.items || [];
+  renderDeadLetters();
+}
+
+async function requeueDeadLetter(taskId) {
+  setStatus(`Requeueing failed task ${taskId}...`);
+  const accepted = await fetchJson(`/api/tasks/${taskId}/requeue`, { method: "POST" });
+  state.activeTaskId = accepted.task_id;
+  state.activeTaskEvents = [{ ...accepted, timestamp: accepted.created_at }];
+  taskStreamStatus.textContent = `Task ${accepted.task_id} queued from dead letter.`;
+  renderTaskEvents();
+  await loadDeadLetters();
+  connectTaskSocket(accepted.task_id);
+  setStatus(`Requeued task ${accepted.task_id}.`);
+}
+
 async function startReview() {
   if (!state.activeSessionId) {
     setStatus("Select or create a session first.");
@@ -808,6 +861,9 @@ function registerEvents() {
   refreshRuntimeButton.addEventListener("click", () => {
     loadRuntime().catch((error) => setStatus(`Refresh Runtime failed: ${error.message}`));
   });
+  refreshDeadLetterButton.addEventListener("click", () => {
+    loadDeadLetters().catch((error) => setStatus(`Refresh Dead Letter Queue failed: ${error.message}`));
+  });
   loadConfigButton.addEventListener("click", () => {
     loadConfigSummary().catch((error) => setStatus(`Load Config failed: ${error.message}`));
   });
@@ -821,9 +877,10 @@ async function initDashboard() {
   registerEvents();
   renderSessionDetails();
   renderTaskEvents();
+  renderDeadLetters();
   renderRuntimeSummary({ error: "Runtime summary has not been loaded." });
   renderConfigSummary({ error: "Provider Routing configuration has not been loaded." });
-  await Promise.all([loadSessions(), loadRuntime(), loadConfigSummary()]);
+  await Promise.all([loadSessions(), loadRuntime(), loadConfigSummary(), loadDeadLetters()]);
 }
 
 window.addEventListener("beforeunload", () => {
