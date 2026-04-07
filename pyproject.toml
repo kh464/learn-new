@@ -1,0 +1,18 @@
+[project]
+name = "learn-new"
+version = "0.1.0"
+description = "Adaptive teaching multi-agent MVP"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi",
+  "langgraph",
+  "openai",
+  "pydantic",
+  "pyyaml",
+  "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+]

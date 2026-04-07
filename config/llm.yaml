@@ -1,0 +1,52 @@
+version: 1
+
+llm:
+  default_provider: siliconflow
+  default_profile: chat
+  timeout_seconds: 120
+  max_retries: 2
+
+  providers:
+    siliconflow:
+      enabled: true
+      base_url: https://api.siliconflow.cn/v1
+      api_key: ${SILICONFLOW_API_KEY}
+      models:
+        chat: Qwen/Qwen2.5-32B-Instruct
+        reasoning: deepseek-ai/DeepSeek-R1
+        fast: Qwen/Qwen2.5-7B-Instruct
+        embedding: BAAI/bge-m3
+
+      generation:
+        temperature: 0.7
+        top_p: 0.95
+        max_tokens: 4096
+
+  routing:
+    profiles:
+      chat:
+        provider: siliconflow
+        model: Qwen/Qwen2.5-32B-Instruct
+      reasoning:
+        provider: siliconflow
+        model: deepseek-ai/DeepSeek-R1
+      fast:
+        provider: siliconflow
+        model: Qwen/Qwen2.5-7B-Instruct
+      embedding:
+        provider: siliconflow
+        model: BAAI/bge-m3
+
+  # Add more providers with the same shape when needed.
+  # Example:
+  #
+  # providers:
+  #   openai:
+  #     enabled: true
+  #     base_url: https://api.openai.com/v1
+  #     api_key: ${OPENAI_API_KEY}
+  #     models:
+  #       chat: gpt-4.1
+  #       reasoning: gpt-4.1
+  #       fast: gpt-4.1-mini
+  #       embedding: text-embedding-3-large

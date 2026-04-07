@@ -1,0 +1,6 @@
+.learn/
+__pycache__/
+.pytest_cache/
+*.pyc
+.yaml
+config/
