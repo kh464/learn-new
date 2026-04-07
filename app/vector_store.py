@@ -19,9 +19,10 @@ class QdrantKnowledgeIndex:
         self.collection_name = collection_name
         self.vector_size = vector_size
         self.transport = transport or self._request_json
-        self._ensure_collection()
+        self._collection_ready = False
 
     def upsert(self, session_id: str, chunks: list[KnowledgeChunk]) -> None:
+        self._ensure_collection()
         points = []
         for chunk in chunks:
             points.append(
@@ -45,6 +46,7 @@ class QdrantKnowledgeIndex:
         )
 
     def search(self, session_id: str, query: str, limit: int = 3) -> list[KnowledgeChunk]:
+        self._ensure_collection()
         payload = self.transport(
             "POST",
             f"{self.base_url}/collections/{self.collection_name}/points/search",
@@ -71,11 +73,14 @@ class QdrantKnowledgeIndex:
         return results
 
     def _ensure_collection(self) -> None:
+        if self._collection_ready:
+            return
         self.transport(
             "PUT",
             f"{self.base_url}/collections/{self.collection_name}",
             {"vectors": {"size": self.vector_size, "distance": "Cosine"}},
         )
+        self._collection_ready = True
 
     def _embed(self, text: str) -> list[float]:
         vector = [0.0] * self.vector_size

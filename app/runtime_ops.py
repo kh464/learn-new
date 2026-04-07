@@ -47,12 +47,15 @@ class MetricsRegistry:
         self.request_count = 0
         self.latency_ms_total = 0.0
         self.status_counts: dict[int, int] = defaultdict(int)
+        self.path_status_counts: dict[tuple[str, int], int] = defaultdict(int)
 
-    def record(self, status_code: int, latency_ms: float) -> None:
+    def record(self, status_code: int, latency_ms: float, path: str = "") -> None:
         with self._lock:
             self.request_count += 1
             self.latency_ms_total += latency_ms
             self.status_counts[status_code] += 1
+            if path:
+                self.path_status_counts[(path, status_code)] += 1
 
     def render_prometheus(self) -> str:
         with self._lock:
@@ -68,7 +71,29 @@ class MetricsRegistry:
             ]
             for status_code, count in sorted(self.status_counts.items()):
                 lines.append(f'learn_new_requests_by_status_total{{status="{status_code}"}} {count}')
+            lines.extend(
+                [
+                    "# HELP learn_new_requests_by_path_total HTTP requests partitioned by route path and status code.",
+                    "# TYPE learn_new_requests_by_path_total counter",
+                ]
+            )
+            for (path, status_code), count in sorted(self.path_status_counts.items()):
+                lines.append(
+                    f'learn_new_requests_by_path_total{{path="{path}",status="{status_code}"}} {count}'
+                )
         return "\n".join(lines) + "\n"
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {
+                "request_count": self.request_count,
+                "latency_ms_total": round(self.latency_ms_total, 3),
+                "status_counts": {str(key): value for key, value in self.status_counts.items()},
+                "path_status_counts": {
+                    f"{path}|{status_code}": count
+                    for (path, status_code), count in self.path_status_counts.items()
+                },
+            }
 
 
 class AuditLogger:

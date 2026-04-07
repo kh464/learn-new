@@ -62,6 +62,16 @@ def test_docker_python_sandbox_uses_isolated_container_flags() -> None:
     assert command[:4] == ["docker", "run", "--rm", "--network"]
     assert "none" in command
     assert "--read-only" in command
+    assert "--cap-drop=ALL" in command
+    assert "--security-opt" in command
+    assert "no-new-privileges" in command
+    assert "--user" in command
+    assert "65534:65534" in command
+    assert "--pids-limit" in command
+    assert "64" in command
+    assert "--ulimit" in command
+    assert "nofile=64:64" in command
+    assert "--tmpfs" in command
     assert "--memory" in command
     assert "128m" in command
     assert "--cpus" in command

@@ -1,6 +1,7 @@
 # LLM Configuration
 
 The project uses `config/llm.yaml` as the runtime configuration file.
+You can override the runtime file with `LEARN_NEW_CONFIG_PATH`.
 
 ## Current default
 
@@ -96,6 +97,7 @@ storage:
 ```
 
 The PostgreSQL store persists session state and checkpoint metadata in SQL tables while the `.learn/` workspace continues to mirror artifacts for exports and local inspection.
+The repository also includes `config/llm.production.yaml` as a ready-made template that wires PostgreSQL, Redis, Qdrant, Docker sandboxing, and role-based tokens together.
 
 ## Admin API key protection
 
@@ -133,6 +135,7 @@ Role behavior:
 - `admin`: read + write + operational APIs such as `/metrics` and `/api/audit`
 
 When role-based access is enabled, newly created sessions are scoped to the creating principal. Non-admin principals only see and fetch their own sessions.
+Runtime rate limiting is also keyed by authenticated principal first, so different operators do not consume the same bucket when they share an ingress IP.
 
 Send the header on protected requests:
 
@@ -159,6 +162,7 @@ rate_limit:
 
 With `backend=memory`, the limiter is process-local and useful for single-node hardening.
 With `backend=redis`, counters are stored in Redis instead of process memory.
+When a request is throttled, the API responds with `429` and a `Retry-After` header.
 
 ## Metrics and request ids
 
@@ -173,6 +177,8 @@ observability:
 ```
 
 `/api/audit` returns recent audit entries when accessed with an admin token.
+`/api/runtime/summary` returns backend selection, metric snapshots, live backend probe results, security summary, and audit summary for admin operators.
+`/health/ready` actively probes configured storage, rate-limit, knowledge, and sandbox backends. It returns `503` when a required backend is configured but unavailable.
 
 ## Sandbox backend
 
@@ -198,7 +204,7 @@ sandbox:
   cpu_limit: 1.0
 ```
 
-When `backend=docker`, the practice evaluator runs Python code inside an ephemeral container with `--network none`, `--read-only`, CPU limits, and memory limits.
+When `backend=docker`, the practice evaluator runs Python code inside an ephemeral container with `--network none`, `--read-only`, `--cap-drop=ALL`, `no-new-privileges`, a nobody user, pid/file descriptor limits, CPU limits, and memory limits.
 
 ## Knowledge backend
 

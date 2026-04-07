@@ -58,10 +58,22 @@ $env:SILICONFLOW_API_KEY="你的真实key"
 .\scripts\dev.ps1
 ```
 
+如果需要切换到其他配置文件，可先设置：
+
+```powershell
+$env:LEARN_NEW_CONFIG_PATH="config/llm.production.yaml"
+```
+
 容器方式启动：
 
 ```powershell
 docker compose up --build
+```
+
+带 PostgreSQL + Redis + Qdrant 的生产模板启动：
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.infra.yml up --build
 ```
 
 如果你直接在 Windows 终端里运行 Python 命令看到中文显示异常，优先使用 `scripts/dev.ps1` 和 `scripts/test.ps1`。
@@ -94,6 +106,7 @@ http://127.0.0.1:8000/dashboard
 - `GET /metrics`
 - `GET /api/config`
 - `GET /api/audit`
+- `GET /api/runtime/summary`
 - `GET /api/sessions`
 - `POST /api/sessions`
 - `GET /api/sessions/{session_id}`
@@ -108,12 +121,16 @@ http://127.0.0.1:8000/dashboard
 - `POST /api/sessions/{session_id}/reviews`
 - `POST /api/sessions/{session_id}/turns`
 
+`GET /health/ready` 现在会主动探测当前配置的 SQLite/PostgreSQL、Redis、Qdrant、Docker 等后端。
+当必需后端不可达时会返回 `503`，并在响应体的 `checks` 字段里给出逐项诊断。
+
 `GET /api/config` 会返回当前默认 provider、默认 profile，以及 `llm_available`，用于判断当前是否会走真实模型。
 
 如果启用了 `security.enabled=true`，除 `GET /health`、`GET /health/ready`、`GET /dashboard` 之外的接口都需要携带 `X-Admin-Key`。
 可以继续使用单个共享 key，也可以配置 `viewer / operator / admin` 三类 token。
 启用角色化 token 后，非 admin 默认只能看到自己创建的 session。
-如果启用了 `rate_limit.enabled=true`，服务会按进程内窗口做基础限流。
+如果启用了 `rate_limit.enabled=true`，服务会按鉴权后的 principal 优先限流；匿名流量则退回到 client IP 维度。
+触发限流时会返回 `429`，并带上 `Retry-After` 响应头。
 
 ## API 示例
 
@@ -276,11 +293,15 @@ docker build -t learn-new:local .
 - 已实现角色化 token 访问控制，`viewer` 只读，`operator` 可写业务接口，`admin` 额外拥有 `/metrics` 与 `/api/audit`
 - 已实现基于 session owner 的可见性隔离，非 admin 默认只能访问自己创建的 session
 - 已实现 JSONL 审计日志落盘与 `/api/audit` 最近记录查询
+- 已实现按 path/status 聚合的 metrics，以及 `/api/runtime/summary` 运行时摘要
+- 已实现主动式 readiness probe，`/health/ready` 可返回各后端逐项健康诊断
 - 已实现 checkpoint 列表与恢复接口，可从 `.learn/checkpoints` 显式回滚 session 状态
 - 已实现 session export 接口，可导出 summary、timeline、checkpoint 和核心工件
 - 已实现 session index 接口，前端仪表盘可以直接列出全部学习会话
 - 已实现轻量 dashboard 页面，可直接消费现有 API 展示 session list、summary、timeline、lesson、practice、latest feedback、due review queue、knowledge search、export preview，并支持创建 session、上传知识、检索知识、提交回答、启动 review、恢复 checkpoint、预览导出、导出 session
 - 已补充 `Dockerfile`、`.dockerignore`、`docker-compose.yml` 作为单节点部署底座
+- 已补充 `config/llm.production.yaml` 和 `docker-compose.infra.yml`，可直接拉起 PostgreSQL、Redis、Qdrant 的基础生产模板
+- 容器模板已补充 healthcheck、只读根文件系统、`no-new-privileges`、`cap_drop=ALL`、`tmpfs` 与 `pids_limit`
 - 已补充基础备份与恢复脚本，便于单节点灾备和本地恢复
 
 后续扩展优先级建议：

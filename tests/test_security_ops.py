@@ -81,11 +81,66 @@ def test_api_rate_limits_repeated_requests_and_exposes_metrics(tmp_path: Path) -
     second = client.get("/api/config")
     assert second.status_code == 429
     assert second.headers["X-Request-ID"]
+    assert second.headers["Retry-After"] == "60"
 
     metrics = client.get("/metrics")
     assert metrics.status_code == 200
     assert "learn_new_requests_total" in metrics.text
     assert "learn_new_request_latency_ms_total" in metrics.text
+
+
+def test_rate_limit_is_scoped_per_authenticated_principal(tmp_path: Path) -> None:
+    config_path = tmp_path / "llm.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "llm:",
+                "  default_provider: siliconflow",
+                "  default_profile: chat",
+                "  providers:",
+                "    siliconflow:",
+                "      enabled: true",
+                "      base_url: https://api.siliconflow.cn/v1",
+                "      api_key:",
+                "      models:",
+                "        chat: Qwen/Qwen2.5-7B-Instruct",
+                "  routing:",
+                "    profiles:",
+                "      chat:",
+                "        provider: siliconflow",
+                "        model: Qwen/Qwen2.5-7B-Instruct",
+                "security:",
+                "  enabled: true",
+                "  api_key_header: X-Admin-Key",
+                "  principals:",
+                "    - name: alice",
+                "      api_key: alice-key",
+                "      role: viewer",
+                "    - name: bob",
+                "      api_key: bob-key",
+                "      role: viewer",
+                "    - name: root",
+                "      api_key: root-key",
+                "      role: admin",
+                "rate_limit:",
+                "  enabled: true",
+                "  requests: 1",
+                "  window_seconds: 60",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    app = create_app(workspace_root=tmp_path / ".learn", config_path=config_path)
+    client = TestClient(app)
+
+    alice_first = client.get("/api/config", headers={"X-Admin-Key": "alice-key"})
+    bob_first = client.get("/api/config", headers={"X-Admin-Key": "bob-key"})
+    alice_second = client.get("/api/config", headers={"X-Admin-Key": "alice-key"})
+
+    assert alice_first.status_code == 200
+    assert bob_first.status_code == 200
+    assert alice_second.status_code == 429
 
 
 def test_api_enforces_role_based_tokens_and_exposes_audit_log(tmp_path: Path) -> None:

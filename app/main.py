@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from time import perf_counter
 from pathlib import Path
 from uuid import uuid4
 import importlib
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi import status
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from app.dashboard import render_dashboard
@@ -25,6 +27,7 @@ from app.api.schemas import (
 from app.config import AppConfig, load_config
 from app.knowledge import KnowledgeService
 from app.orchestrator import LearningOrchestrator
+from app.runtime_health import RuntimeHealthService
 from app.runtime_ops import AuditLogger, InMemoryRateLimiter, MetricsRegistry, RedisRateLimiter
 
 
@@ -36,6 +39,7 @@ def create_app(
     config = load_config(config_path)
     orchestrator = LearningOrchestrator(workspace_root=Path(workspace_root), config=config)
     metrics = MetricsRegistry()
+    runtime_health = RuntimeHealthService(config=config, workspace_root=Path(workspace_root))
     audit_logger = AuditLogger(Path(config.observability.audit_log_path)) if config.observability.audit_log_path else None
     rate_limiter = None
     if config.rate_limit.enabled:
@@ -59,6 +63,7 @@ def create_app(
     app.state.config = config
     app.state.metrics = metrics
     app.state.audit_logger = audit_logger
+    app.state.runtime_health = runtime_health
 
     role_levels = {"viewer": 1, "operator": 2, "admin": 3}
 
@@ -78,7 +83,7 @@ def create_app(
         path = request.url.path
         if path in {"/health", "/health/ready", "/dashboard"}:
             return None
-        if path == "/metrics" or path == "/api/audit":
+        if path in {"/metrics", "/api/audit", "/api/runtime/summary"}:
             return "admin"
         if not path.startswith("/api/"):
             return None
@@ -108,7 +113,7 @@ def create_app(
         def finalize(response):
             latency_ms = (perf_counter() - started) * 1000
             response.headers[request_id_header] = request_id
-            metrics.record(response.status_code, latency_ms)
+            metrics.record(response.status_code, latency_ms, path=request.url.path)
             if audit_logger is not None and request.url.path not in {"/health", "/health/ready"}:
                 audit_logger.append(
                     {
@@ -137,8 +142,11 @@ def create_app(
 
         if rate_limiter is not None and request.url.path not in {"/health", "/metrics"}:
             client_host = request.client.host if request.client else "unknown"
-            if not rate_limiter.allow(client_host):
-                return finalize(JSONResponse(status_code=429, content={"detail": "Too Many Requests"}))
+            rate_limit_key = principal_name if principal_name != "anonymous" else client_host
+            if not rate_limiter.allow(rate_limit_key):
+                response = JSONResponse(status_code=429, content={"detail": "Too Many Requests"})
+                response.headers["Retry-After"] = str(config.rate_limit.window_seconds)
+                return finalize(response)
 
         response = await call_next(request)
         return finalize(response)
@@ -148,17 +156,11 @@ def create_app(
         return {"status": "ok"}
 
     @app.get("/health/ready")
-    def health_ready() -> dict[str, str | bool]:
-        return {
-            "status": "ok",
-            "storage_backend": config.storage.backend,
-            "knowledge_backend": config.knowledge.backend,
-            "sandbox_backend": config.sandbox.backend,
-            "metrics_enabled": config.observability.metrics_enabled,
-            "security_enabled": config.security.enabled,
-            "rate_limit_enabled": config.rate_limit.enabled,
-            "rate_limit_backend": config.rate_limit.backend,
-        }
+    def health_ready():
+        payload = runtime_health.readiness_payload()
+        if payload["status"] != "ok":
+            return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=payload)
+        return payload
 
     if config.observability.metrics_enabled:
         @app.get("/metrics")
@@ -170,6 +172,15 @@ def create_app(
         if audit_logger is None:
             return {"items": []}
         return {"items": audit_logger.read_recent(limit=limit)}
+
+    @app.get("/api/runtime/summary")
+    def get_runtime_summary() -> dict:
+        return runtime_health.runtime_summary(
+            metrics_snapshot=metrics.snapshot(),
+            audit_enabled=audit_logger is not None,
+            audit_recent_count=len(audit_logger.read_recent(limit=20)) if audit_logger is not None else 0,
+            session_total=app.state.orchestrator.list_sessions()["total"],
+        )
 
     @app.get("/dashboard")
     def dashboard() -> HTMLResponse:
@@ -338,4 +349,4 @@ def create_app(
     return app
 
 
-app = create_app()
+app = create_app(config_path=Path(os.getenv("LEARN_NEW_CONFIG_PATH", "config/llm.yaml")))

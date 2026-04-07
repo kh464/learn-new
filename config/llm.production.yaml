@@ -1,0 +1,79 @@
+version: 1
+
+llm:
+  default_provider: siliconflow
+  default_profile: chat
+  timeout_seconds: 120
+  max_retries: 2
+
+  providers:
+    siliconflow:
+      enabled: true
+      base_url: https://api.siliconflow.cn/v1
+      api_key: ${SILICONFLOW_API_KEY}
+      models:
+        chat: Qwen/Qwen2.5-32B-Instruct
+        reasoning: deepseek-ai/DeepSeek-R1
+        fast: Qwen/Qwen2.5-7B-Instruct
+        embedding: BAAI/bge-m3
+
+  routing:
+    profiles:
+      chat:
+        provider: siliconflow
+        model: Qwen/Qwen2.5-32B-Instruct
+      reasoning:
+        provider: siliconflow
+        model: deepseek-ai/DeepSeek-R1
+      fast:
+        provider: siliconflow
+        model: Qwen/Qwen2.5-7B-Instruct
+      embedding:
+        provider: siliconflow
+        model: BAAI/bge-m3
+
+storage:
+  backend: postgres
+  sqlite_path: .learn/sessions.db
+  postgres_dsn: ${LEARN_NEW_POSTGRES_DSN}
+
+security:
+  enabled: true
+  api_key_header: X-Admin-Key
+  api_key: ${LEARN_NEW_ADMIN_KEY}
+  principals:
+    - name: viewer
+      api_key: ${LEARN_NEW_VIEWER_KEY}
+      role: viewer
+    - name: operator
+      api_key: ${LEARN_NEW_OPERATOR_KEY}
+      role: operator
+    - name: admin
+      api_key: ${LEARN_NEW_ADMIN_KEY}
+      role: admin
+
+rate_limit:
+  enabled: true
+  backend: redis
+  requests: 300
+  window_seconds: 60
+  redis_url: ${LEARN_NEW_REDIS_URL}
+  key_prefix: learn-new:rate
+
+observability:
+  metrics_enabled: true
+  request_id_header: X-Request-ID
+  audit_log_path: .learn/audit/events.jsonl
+
+sandbox:
+  backend: docker
+  timeout_seconds: 10
+  docker_image: python:3.12-slim
+  memory_mb: 256
+  cpu_limit: 1.0
+
+knowledge:
+  backend: qdrant
+  qdrant_url: ${LEARN_NEW_QDRANT_URL}
+  collection_name: learn-new
+  vector_size: 16

@@ -6,6 +6,7 @@ from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
+from pydantic import model_validator
 from typing_extensions import Literal
 
 
@@ -36,12 +37,34 @@ class StorageSettings(BaseModel):
     sqlite_path: str | None = None
     postgres_dsn: str | None = None
 
+    @model_validator(mode="after")
+    def validate_backend_requirements(self) -> "StorageSettings":
+        if self.backend == "postgres" and not self.postgres_dsn:
+            raise ValueError("storage.postgres_dsn is required when storage.backend=postgres")
+        return self
+
 
 class SecuritySettings(BaseModel):
     enabled: bool = False
     api_key_header: str = "X-Admin-Key"
     api_key: str | None = None
     principals: list["SecurityPrincipal"] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_access_configuration(self) -> "SecuritySettings":
+        if not self.enabled:
+            return self
+        if not self.api_key and not self.principals:
+            raise ValueError("security.api_key or security.principals is required when security.enabled=true")
+        principal_names = [principal.name for principal in self.principals]
+        if len(principal_names) != len(set(principal_names)):
+            raise ValueError("security.principals names must be unique")
+        if self.principals:
+            if any(not principal.api_key for principal in self.principals):
+                raise ValueError("security.principals api_key values must not be empty")
+            if not any(principal.role == "admin" for principal in self.principals):
+                raise ValueError("security.principals must include at least one admin principal")
+        return self
 
 
 class RateLimitSettings(BaseModel):
@@ -51,6 +74,12 @@ class RateLimitSettings(BaseModel):
     window_seconds: int = 60
     redis_url: str | None = None
     key_prefix: str = "learn-new:rate"
+
+    @model_validator(mode="after")
+    def validate_backend_requirements(self) -> "RateLimitSettings":
+        if self.enabled and self.backend == "redis" and not self.redis_url:
+            raise ValueError("rate_limit.redis_url is required when rate_limit.backend=redis")
+        return self
 
 
 class ObservabilitySettings(BaseModel):
@@ -66,12 +95,24 @@ class SandboxSettings(BaseModel):
     memory_mb: int = 256
     cpu_limit: float = 1.0
 
+    @model_validator(mode="after")
+    def validate_backend_requirements(self) -> "SandboxSettings":
+        if self.backend == "docker" and not self.docker_image:
+            raise ValueError("sandbox.docker_image is required when sandbox.backend=docker")
+        return self
+
 
 class KnowledgeSettings(BaseModel):
     backend: Literal["file", "qdrant"] = "file"
     qdrant_url: str | None = None
     collection_name: str = "learn-new"
     vector_size: int = 16
+
+    @model_validator(mode="after")
+    def validate_backend_requirements(self) -> "KnowledgeSettings":
+        if self.backend == "qdrant" and not self.qdrant_url:
+            raise ValueError("knowledge.qdrant_url is required when knowledge.backend=qdrant")
+        return self
 
 
 class SecurityPrincipal(BaseModel):

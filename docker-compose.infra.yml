@@ -1,0 +1,60 @@
+services:
+  app:
+    environment:
+      LEARN_NEW_CONFIG_PATH: /app/config/llm.production.yaml
+      LEARN_NEW_POSTGRES_DSN: postgresql://learn_new:learn_new@postgres:5432/learn_new
+      LEARN_NEW_REDIS_URL: redis://redis:6379/0
+      LEARN_NEW_QDRANT_URL: http://qdrant:6333
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    volumes:
+      - learn_new_workspace:/app/.learn
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: learn_new
+      POSTGRES_USER: learn_new
+      POSTGRES_PASSWORD: learn_new
+    ports:
+      - "5432:5432"
+    volumes:
+      - learn_new_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U learn_new -d learn_new"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - learn_new_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    ports:
+      - "6333:6333"
+    volumes:
+      - learn_new_qdrant:/qdrant/storage
+    restart: unless-stopped
+
+volumes:
+  learn_new_postgres:
+  learn_new_redis:
+  learn_new_qdrant:
