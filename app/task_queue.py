@@ -4,7 +4,7 @@ import importlib
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
@@ -401,6 +401,9 @@ class PostgresTaskQueue(InMemoryTaskQueue):
     ) -> None:
         self.dsn = dsn
         self.connect_factory = connect_factory or self._default_connect_factory()
+        self.worker_id = uuid4().hex
+        self.lease_seconds = 30
+        self.poll_interval_seconds = 0.1
         super().__init__(
             worker_threads=worker_threads,
             max_queue_size=max_queue_size,
@@ -449,7 +452,9 @@ class PostgresTaskQueue(InMemoryTaskQueue):
                     started_at TEXT,
                     completed_at TEXT,
                     attempt_count INTEGER NOT NULL DEFAULT 0,
-                    max_attempts INTEGER NOT NULL DEFAULT 1
+                    max_attempts INTEGER NOT NULL DEFAULT 1,
+                    lease_owner TEXT,
+                    lease_expires_at TEXT
                 )
                 """
             )
@@ -468,6 +473,10 @@ class PostgresTaskQueue(InMemoryTaskQueue):
                 cursor.execute("ALTER TABLE task_queue ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0")
             if "max_attempts" not in columns:
                 cursor.execute("ALTER TABLE task_queue ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 1")
+            if "lease_owner" not in columns:
+                cursor.execute("ALTER TABLE task_queue ADD COLUMN lease_owner TEXT")
+            if "lease_expires_at" not in columns:
+                cursor.execute("ALTER TABLE task_queue ADD COLUMN lease_expires_at TEXT")
             cursor.close()
 
     def _load_existing_tasks(self) -> None:
@@ -476,7 +485,7 @@ class PostgresTaskQueue(InMemoryTaskQueue):
             cursor.execute(
                 """
                 SELECT task_id, task_type, session_id, owner_id, payload_json, status, error, result_json,
-                       created_at, started_at, completed_at, attempt_count, max_attempts
+                       created_at, started_at, completed_at, attempt_count, max_attempts, lease_owner, lease_expires_at
                 FROM task_queue
                 ORDER BY created_at ASC
                 """
@@ -485,33 +494,25 @@ class PostgresTaskQueue(InMemoryTaskQueue):
             cursor.close()
         with self._lock:
             for row in rows:
-                raw_status = row[5]
-                attempt_count = int(row[11] or 0)
-                max_attempts = int(row[12] or 1)
-                should_resume = raw_status in {"queued", "running"} and attempt_count < max_attempts
-                status = "queued" if should_resume else raw_status
-                if raw_status in {"queued", "running"} and not should_resume:
-                    status = "failed"
                 record = {
                     "task_id": row[0],
                     "task_type": row[1],
                     "session_id": row[2],
                     "owner_id": row[3],
                     "payload": json.loads(row[4]),
-                    "status": status,
-                    "error": row[6] or ("Worker restarted before task completion." if raw_status in {"queued", "running"} else None),
+                    "status": row[5],
+                    "error": row[6],
                     "result": json.loads(row[7]) if row[7] else None,
                     "created_at": row[8],
                     "started_at": row[9],
-                    "completed_at": None if should_resume else (row[10] or (_utc_iso() if raw_status in {"queued", "running"} else None)),
-                    "attempt_count": attempt_count,
-                    "max_attempts": max_attempts,
+                    "completed_at": row[10],
+                    "attempt_count": int(row[11] or 0),
+                    "max_attempts": int(row[12] or 1),
+                    "lease_owner": row[13],
+                    "lease_expires_at": row[14],
                     "runner": None,
                 }
                 self._tasks[record["task_id"]] = record
-                self._persist_record(record)
-                if should_resume:
-                    self._queue.put({"task_id": record["task_id"]})
 
     def submit(
         self,
@@ -522,22 +523,203 @@ class PostgresTaskQueue(InMemoryTaskQueue):
         payload: dict | None = None,
         runner: Callable[[], dict] | None = None,
     ) -> dict:
-        task = super().submit(
-            task_type=task_type,
-            session_id=session_id,
-            owner_id=owner_id,
-            payload=payload,
-            runner=runner,
-        )
+        self.start()
+        task_id = uuid4().hex
+        record = {
+            "task_id": task_id,
+            "task_type": task_type,
+            "session_id": session_id,
+            "owner_id": owner_id,
+            "payload": payload or {},
+            "status": "queued",
+            "error": None,
+            "result": None,
+            "created_at": _utc_iso(),
+            "started_at": None,
+            "completed_at": None,
+            "attempt_count": 0,
+            "max_attempts": self.max_attempts,
+            "lease_owner": None,
+            "lease_expires_at": None,
+            "runner": runner,
+        }
         with self._lock:
-            self._persist_record(self._tasks[task["task_id"]])
+            self._tasks[task_id] = record
+            self._persist_record(record)
+        task = self._public_record(record)
+        self._emit(task)
         return task
 
+    def start(self) -> None:
+        with self._lock:
+            if self._started:
+                return
+            self._stop.clear()
+            self._workers = [
+                Thread(target=self._worker_loop, name=f"learn-new-task-{index}", daemon=True)
+                for index in range(self.worker_threads)
+            ]
+            for worker in self._workers:
+                worker.start()
+            self._started = True
+
+    def shutdown(self) -> None:
+        with self._lock:
+            if not self._started:
+                return
+            workers = list(self._workers)
+            self._started = False
+        self._stop.set()
+        for worker in workers:
+            worker.join(timeout=1)
+
+    def get(self, task_id: str) -> dict:
+        self._refresh_task(task_id)
+        return super().get(task_id)
+
+    def _worker_loop(self) -> None:
+        while not self._stop.is_set():
+            record = self._claim_next_task()
+            if record is None:
+                sleep(self.poll_interval_seconds)
+                continue
+            self._emit(self._public_record(record))
+            try:
+                result = self._execute(record)
+                with self._lock:
+                    record["status"] = "completed"
+                    record["result"] = result
+                    record["error"] = None
+                    record["completed_at"] = _utc_iso()
+                    record["lease_owner"] = None
+                    record["lease_expires_at"] = None
+                    self._persist_record(record)
+                    public = self._public_record(record)
+            except Exception as exc:
+                with self._lock:
+                    record["error"] = repr(exc)
+                    record["lease_owner"] = None
+                    record["lease_expires_at"] = None
+                    if record["attempt_count"] < record["max_attempts"]:
+                        record["status"] = "queued"
+                        record["completed_at"] = None
+                    else:
+                        record["status"] = "failed"
+                        record["completed_at"] = _utc_iso()
+                    self._persist_record(record)
+                    public = self._public_record(record)
+            self._emit(public)
+
+    def _claim_next_task(self) -> dict | None:
+        now = _utc_iso()
+        lease_expires_at = _utc_iso_after(self.lease_seconds)
+        with self._connect() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                self._query(
+                    """
+                    UPDATE task_queue
+                    SET status = 'running',
+                        lease_owner = ?,
+                        lease_expires_at = ?,
+                        started_at = ?,
+                        attempt_count = attempt_count + 1
+                    WHERE task_id = (
+                        SELECT task_id
+                        FROM task_queue
+                        WHERE status = 'queued'
+                           OR (status = 'running' AND (lease_expires_at IS NULL OR lease_expires_at < ?) AND attempt_count < max_attempts)
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                    )
+                    RETURNING task_id, task_type, session_id, owner_id, payload_json, status, error, result_json,
+                              created_at, started_at, completed_at, attempt_count, max_attempts, lease_owner, lease_expires_at
+                    """
+                ),
+                (
+                    self.worker_id,
+                    lease_expires_at,
+                    now,
+                    now,
+                ),
+            )
+            row = cursor.fetchone()
+            cursor.close()
+        if row is None:
+            return None
+        record = {
+            "task_id": row[0],
+            "task_type": row[1],
+            "session_id": row[2],
+            "owner_id": row[3],
+            "payload": json.loads(row[4]),
+            "status": row[5],
+            "error": row[6],
+            "result": json.loads(row[7]) if row[7] else None,
+            "created_at": row[8],
+            "started_at": row[9],
+            "completed_at": row[10],
+            "attempt_count": int(row[11] or 0),
+            "max_attempts": int(row[12] or 1),
+            "lease_owner": row[13],
+            "lease_expires_at": row[14],
+            "runner": None,
+        }
+        with self._lock:
+            self._tasks[record["task_id"]] = record
+        return record
+
+    def _refresh_task(self, task_id: str) -> None:
+        with self._connect() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                self._query(
+                    """
+                    SELECT task_id, task_type, session_id, owner_id, payload_json, status, error, result_json,
+                           created_at, started_at, completed_at, attempt_count, max_attempts, lease_owner, lease_expires_at
+                    FROM task_queue
+                    WHERE task_id = ?
+                    """
+                ),
+                (task_id,),
+            )
+            row = cursor.fetchone()
+            cursor.close()
+        if row is None:
+            raise FileNotFoundError(task_id)
+        record = {
+            "task_id": row[0],
+            "task_type": row[1],
+            "session_id": row[2],
+            "owner_id": row[3],
+            "payload": json.loads(row[4]),
+            "status": row[5],
+            "error": row[6],
+            "result": json.loads(row[7]) if row[7] else None,
+            "created_at": row[8],
+            "started_at": row[9],
+            "completed_at": row[10],
+            "attempt_count": int(row[11] or 0),
+            "max_attempts": int(row[12] or 1),
+            "lease_owner": row[13],
+            "lease_expires_at": row[14],
+            "runner": None,
+        }
+        with self._lock:
+            self._tasks[task_id] = record
+
     def snapshot(self) -> dict:
-        payload = super().snapshot()
-        payload["backend"] = "postgres"
-        payload["postgres_dsn_configured"] = bool(self.dsn)
-        return payload
+        with self._lock:
+            counts = {"queued": 0, "running": 0, "completed": 0, "failed": 0}
+            for record in self._tasks.values():
+                counts[record["status"]] = counts.get(record["status"], 0) + 1
+            return {
+                "backend": "postgres",
+                "worker_threads": self.worker_threads,
+                "queue_depth": counts["queued"] + counts["running"],
+                "counts": counts,
+                "postgres_dsn_configured": bool(self.dsn),
+            }
 
     def _execute(self, record: dict) -> dict:
         result = super()._execute(record)
@@ -560,8 +742,8 @@ class PostgresTaskQueue(InMemoryTaskQueue):
                     """
                     INSERT INTO task_queue (
                         task_id, task_type, session_id, owner_id, payload_json, status, error, result_json,
-                        created_at, started_at, completed_at, attempt_count, max_attempts
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        created_at, started_at, completed_at, attempt_count, max_attempts, lease_owner, lease_expires_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(task_id) DO UPDATE SET
                         task_type = excluded.task_type,
                         session_id = excluded.session_id,
@@ -573,7 +755,9 @@ class PostgresTaskQueue(InMemoryTaskQueue):
                         started_at = excluded.started_at,
                         completed_at = excluded.completed_at,
                         attempt_count = excluded.attempt_count,
-                        max_attempts = excluded.max_attempts
+                        max_attempts = excluded.max_attempts,
+                        lease_owner = excluded.lease_owner,
+                        lease_expires_at = excluded.lease_expires_at
                     """
                 ),
                 (
@@ -590,6 +774,8 @@ class PostgresTaskQueue(InMemoryTaskQueue):
                     record["completed_at"],
                     record["attempt_count"],
                     record["max_attempts"],
+                    record.get("lease_owner"),
+                    record.get("lease_expires_at"),
                 ),
             )
             cursor.close()
@@ -597,3 +783,7 @@ class PostgresTaskQueue(InMemoryTaskQueue):
 
 def _utc_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _utc_iso_after(seconds: int) -> str:
+    return (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat()

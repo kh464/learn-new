@@ -218,6 +218,7 @@ tasks:
 Task visibility follows the same owner isolation rules as session access.
 With `backend=sqlite`, task metadata and final results persist across restarts.
 With `backend=postgres`, the queue state is shared through PostgreSQL and can reuse `storage.postgres_dsn` when `tasks.postgres_dsn` is omitted.
+The PostgreSQL backend uses lease-based task claiming so an abandoned running task can be reclaimed by another worker after the lease expires.
 `tasks.max_attempts` controls how many times a failed background job is retried before it is marked failed permanently.
 
 ## External knowledge import
