@@ -10,6 +10,7 @@ from app.main import create_app
 def test_metrics_include_path_labels_and_runtime_summary(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(runtime_health, "_probe_qdrant", lambda base_url: None)
     config_path = tmp_path / "llm.yaml"
+    app_log_path = tmp_path / ".learn" / "logs" / "app.jsonl"
     config_path.write_text(
         "\n".join(
             [
@@ -40,6 +41,7 @@ def test_metrics_include_path_labels_and_runtime_summary(tmp_path: Path, monkeyp
                 "  metrics_enabled: true",
                 "  request_id_header: X-Request-ID",
                 "  audit_log_path: " + (tmp_path / ".learn" / "audit" / "events.jsonl").as_posix(),
+                "  app_log_path: " + app_log_path.as_posix(),
                 "knowledge:",
                 "  backend: qdrant",
                 "  qdrant_url: http://qdrant:6333",

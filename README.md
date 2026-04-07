@@ -5,7 +5,7 @@
 当前实现采用前后端完全分离架构：
 
 - FastAPI 服务
-- Vue 3 + Vite 独立前端工程
+- Vue 3 + Vite 独立前端工程，拆分为用户端与管理端两个入口
 - LangGraph 编排学习流程
 - 本地 `.learn/` 文件系统持久化
 - 可选 SQLite / PostgreSQL 会话状态与 checkpoint 元数据存储
@@ -133,18 +133,31 @@ docker compose -f docker-compose.yml -f docker-compose.infra.yml -f docker-compo
 启动后访问：
 
 ```text
-frontend: http://127.0.0.1:5173
-backend:  http://127.0.0.1:8000
-notice:   http://127.0.0.1:8000/dashboard
+frontend home: http://127.0.0.1:5173
+user app:      http://127.0.0.1:5173/user.html
+admin app:     http://127.0.0.1:5173/admin.html
+backend:       http://127.0.0.1:8000
+notice:        http://127.0.0.1:8000/dashboard
 ```
 
 其中：
 
-- `http://127.0.0.1:5173` 是实际可交互的 Vue 前端
+- `http://127.0.0.1:5173` 是前端导航页
+- `http://127.0.0.1:5173/user.html` 是面向学习者的用户端
+- `http://127.0.0.1:5173/admin.html` 是面向管理者/开发者的后台端
 - `http://127.0.0.1:8000` 是 FastAPI 后端 API
 - `http://127.0.0.1:8000/dashboard` 现在仅提供前端启动说明，不再承载实际 UI
 
-前端当前可直接完成这些操作：
+用户端当前可直接完成这些操作：
+
+- 创建学习 session
+- 填写 background、每周时间预算和学习偏好创建 learner profile
+- 提交 learner answer 推进一轮教学
+- 启动显式 review 回合
+- 查看 lesson、practice、latest feedback
+- 查看 mastery summary、due review queue、timeline
+
+管理端当前可直接完成这些操作：
 
 - 创建学习 session
 - 填写 background、每周时间预算和学习偏好创建更完整的 learner profile
@@ -163,7 +176,7 @@ notice:   http://127.0.0.1:8000/dashboard
 - 查看 `/api/runtime/summary`、`/api/audit`、`/api/logs/app` 聚合后的运行态摘要
 - 查看 `/api/config` 暴露的 provider routing 与默认模型配置
 
-分离式前端的结构、代理和开发说明见：
+分离式双入口前端的结构、代理和开发说明见：
 
 - [docs/frontend-dashboard.md](docs/frontend-dashboard.md)
 
@@ -394,7 +407,7 @@ docker build -t learn-new:local .
 - 已实现 checkpoint 列表与恢复接口，可从 `.learn/checkpoints` 显式回滚 session 状态
 - 已实现 session export 接口，可导出 summary、timeline、checkpoint 和核心工件
 - 已实现 session index 接口，前端仪表盘可以直接列出全部学习会话
-- 已实现前后端完全分离的 Vue 3 + Vite dashboard 工程，可直接消费现有 API 展示 session list、summary、timeline、lesson、practice、latest feedback、due review queue、knowledge search、export preview，并支持创建 session、上传知识、检索知识、提交回答、启动 review、恢复 checkpoint、预览导出、导出 session
+- 已实现前后端完全分离的 Vue 3 + Vite 双入口前端：用户端聚焦学习流程，管理端聚焦任务、运行态、知识导入、导出和恢复等后台能力
 - 已补充 `Dockerfile`、`.dockerignore`、`docker-compose.yml` 作为单节点部署底座
 - 已补充 `config/llm.production.yaml` 和 `docker-compose.infra.yml`，可直接拉起 PostgreSQL、Redis、Qdrant 的基础生产模板
 - 容器模板已补充 healthcheck、只读根文件系统、`no-new-privileges`、`cap_drop=ALL`、`tmpfs` 与 `pids_limit`

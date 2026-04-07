@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:user": "vite --open /user.html",
+    "dev:admin": "vite --open /admin.html",
     "build": "vite build",
+    "build:user": "vite build --mode user",
+    "build:admin": "vite build --mode admin",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -77,7 +77,7 @@
 </template>
 
 <script setup>
-defineOptions({ name: "SessionSidebar" });
+defineOptions({ name: "AdminSessionSidebar" });
 
 defineProps({
   adminKey: { type: String, required: true },

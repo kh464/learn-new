@@ -37,8 +37,8 @@
         <div v-if="!taskEvents.length" class="empty">Queued task events will appear here.</div>
         <div v-for="item in taskEvents" :key="`${item.task_id}-${item.status}-${item.completed_at || item.started_at || item.created_at}`" class="task-event">
           <time>{{ item.timestamp || item.completed_at || item.started_at || item.created_at || "pending" }}</time>
-          <strong>{{ item.status }}</strong>
-          <div class="microcopy">task_id={{ item.task_id }} | attempts={{ item.attempt_count ?? 0 }}/{{ item.max_attempts ?? 1 }}</div>
+          <strong>TaskConsolePanel</strong>
+          <div class="microcopy">task_id={{ item.task_id }} | status={{ item.status }} | attempts={{ item.attempt_count ?? 0 }}/{{ item.max_attempts ?? 1 }}</div>
           <div>{{ item.error || item.result?.latest_feedback || "Task update received." }}</div>
         </div>
       </div>

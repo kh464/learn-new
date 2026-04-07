@@ -1,6 +1,6 @@
 <template>
   <div class="app-shell">
-    <SessionSidebar
+    <AdminSessionSidebar
       :admin-key="adminKey"
       :form="createForm"
       :sessions="sessions"
@@ -14,9 +14,10 @@
     <main class="main-column">
       <section class="hero panel">
         <div>
-          <p class="eyebrow">Mission Control</p>
+          <p class="eyebrow">Admin Console</p>
           <h2>{{ heroTitle }}</h2>
           <p class="lede">{{ heroSubtitle }}</p>
+          <p class="microcopy">{{ adminAccessNotice }}</p>
         </div>
         <div class="hero-actions">
           <button class="action secondary" type="button" @click="refreshSession">Refresh Session</button>
@@ -149,12 +150,12 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 
-import DashboardWorkspacePanel from "./components/DashboardWorkspacePanel.vue";
-import KnowledgePipelinePanel from "./components/KnowledgePipelinePanel.vue";
-import RuntimePulsePanel from "./components/RuntimePulsePanel.vue";
-import SessionSidebar from "./components/SessionSidebar.vue";
-import TaskConsolePanel from "./components/TaskConsolePanel.vue";
-import { apiPaths, createTaskSocket, requestJson, requestText } from "./lib/api.js";
+import AdminSessionSidebar from "../../components/admin/AdminSessionSidebar.vue";
+import DashboardWorkspacePanel from "../../components/admin/DashboardWorkspacePanel.vue";
+import KnowledgePipelinePanel from "../../components/admin/KnowledgePipelinePanel.vue";
+import RuntimePulsePanel from "../../components/admin/RuntimePulsePanel.vue";
+import TaskConsolePanel from "../../components/admin/TaskConsolePanel.vue";
+import { apiPaths, createTaskSocket, requestJson, requestText } from "../../lib/api.js";
 
 const adminKey = ref(window.localStorage.getItem("learn-new.admin-key") || "");
 const statusMessage = ref("Ready.");
@@ -191,10 +192,11 @@ const searchQuery = ref("");
 
 let activeSocket = null;
 
+const adminAccessNotice = computed(() => "Admin operations honor X-Admin-Key when backend security is enabled.");
 const heroTitle = computed(() => activeSession.value?.domain || "No Session Selected");
 const heroSubtitle = computed(() => {
   if (!activeSession.value || !activeSummary.value) {
-    return "Select a session to inspect the learning loop, queue work, import knowledge, and observe runtime health.";
+    return "Inspect the learning loop, queue work, import knowledge, and observe runtime health.";
   }
   return `Session ${activeSession.value.session_id} | mode=${activeSession.value.teaching_mode} | stage=${activeSummary.value.current_stage} | logs=${activeSession.value.log_count}`;
 });
@@ -471,6 +473,10 @@ async function loadExportPreview() {
 }
 
 async function openExport() {
+  if (!activeSessionId.value) {
+    setStatus("Select a session first.");
+    return;
+  }
   const payload = await requestText(`/api/sessions/${activeSessionId.value}/export`, adminKey.value);
   const blob = new Blob([payload], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -494,7 +500,7 @@ onMounted(async () => {
   try {
     await Promise.all([loadSessions(), loadRuntime(), loadConfig(), loadDeadLetters()]);
   } catch (error) {
-    setStatus(`Frontend bootstrap failed: ${error.message}`);
+    setStatus(`Admin bootstrap failed: ${error.message}`);
   }
 });
 

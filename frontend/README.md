@@ -1,6 +1,6 @@
 # Frontend
 
-这是 `learn-new` 的独立前端工程，采用 Vue 3 + Vite。
+这是 `learn-new` 的独立前端工程，采用 Vue 3 + Vite，多入口拆分为用户端和管理端。
 
 ## 本地开发
 
@@ -17,7 +17,18 @@ npm install
 npm run dev
 ```
 
-前端默认地址：`http://127.0.0.1:5173`
+访问地址：
+
+- 导航页：`http://127.0.0.1:5173`
+- 用户端：`http://127.0.0.1:5173/user.html`
+- 管理端：`http://127.0.0.1:5173/admin.html`
+
+如果你想直接打开特定入口，也可以使用：
+
+```powershell
+npm run dev:user
+npm run dev:admin
+```
 
 ## 生产构建
 

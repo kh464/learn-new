@@ -61,8 +61,10 @@ or:
 
 fullstack -> .\scripts\dev-fullstack.ps1
 
-frontend url: http://127.0.0.1:5173
-api base:     http://127.0.0.1:8000
+frontend home:  http://127.0.0.1:5173
+learner app:    http://127.0.0.1:5173/user.html
+admin app:      http://127.0.0.1:5173/admin.html
+api base:       http://127.0.0.1:8000
 
 used APIs:
 - /api/sessions
