@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi import status
 from fastapi.websockets import WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.dashboard import render_dashboard
 from app.api.schemas import (
@@ -134,6 +135,7 @@ def create_app(
                 task_queue.shutdown()
 
     app = FastAPI(title="Learn New MVP", version="0.1.0", lifespan=lifespan)
+    app.mount("/static", StaticFiles(directory=Path(__file__).with_name("static")), name="static")
 
     app.state.orchestrator = orchestrator
     app.state.config = config
@@ -184,7 +186,7 @@ def create_app(
         return can_access_session(principal_name, principal_role, owner_id)
 
     def websocket_principal(websocket: WebSocket) -> tuple[str, str] | None:
-        provided = websocket.headers.get(config.security.api_key_header)
+        provided = websocket.headers.get(config.security.api_key_header) or websocket.query_params.get("api_key")
         if not config.security.enabled:
             return "anonymous", "admin"
         principal = get_principal(provided)
@@ -314,13 +316,31 @@ def create_app(
         return render_dashboard()
 
     @app.get("/api/config")
-    def get_config() -> dict[str, str | int | bool | None]:
+    def get_config() -> dict[str, object]:
         cfg: AppConfig = app.state.config
         return {
             "default_provider": cfg.llm.default_provider,
             "default_profile": cfg.llm.default_profile,
             "timeout_seconds": cfg.llm.timeout_seconds,
+            "max_retries": cfg.llm.max_retries,
             "llm_available": orchestrator.llm.is_available(cfg.llm.default_profile) if orchestrator.llm else False,
+            "providers": {
+                name: {
+                    "enabled": provider.enabled,
+                    "base_url": provider.base_url,
+                    "models": provider.models,
+                }
+                for name, provider in cfg.llm.providers.items()
+            },
+            "routing_profiles": {
+                name: {
+                    "provider": profile.provider,
+                    "model": profile.model,
+                }
+                for name, profile in cfg.llm.routing.get("profiles", {}).items()
+            },
+            "security_enabled": cfg.security.enabled,
+            "tasks_enabled": cfg.tasks.enabled,
         }
 
     @app.post("/api/sessions", response_model=StateResponse, status_code=201)

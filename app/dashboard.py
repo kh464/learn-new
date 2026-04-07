@@ -10,945 +10,255 @@ def render_dashboard() -> HTMLResponse:
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Learn New Dashboard</title>
-  <style>
-    :root {
-      --bg: #f6f1e8;
-      --panel: rgba(255, 250, 241, 0.9);
-      --ink: #172033;
-      --muted: #68707e;
-      --accent: #bc4f2b;
-      --accent-soft: #f0cab9;
-      --line: #ddd1bf;
-      --surface: rgba(255,255,255,0.56);
-      --shadow: 0 18px 45px rgba(27, 31, 37, 0.08);
-      --mono: "IBM Plex Mono", Consolas, monospace;
-      --serif: Georgia, "Times New Roman", serif;
-    }
-
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background:
-        radial-gradient(circle at top left, rgba(188, 79, 43, 0.16), transparent 26%),
-        linear-gradient(135deg, #f8f0e7 0%, #efe5d8 100%);
-      color: var(--ink);
-      font-family: var(--serif);
-    }
-
-    .shell {
-      width: min(1440px, calc(100vw - 28px));
-      margin: 14px auto;
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 18px;
-    }
-
-    .panel {
-      background: var(--panel);
-      backdrop-filter: blur(10px);
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-
-    .sidebar, .content {
-      min-height: calc(100vh - 28px);
-    }
-
-    .sidebar header, .content header {
-      padding: 22px 24px 16px;
-      border-bottom: 1px solid rgba(221, 209, 191, 0.7);
-    }
-
-    .eyebrow {
-      margin: 0;
-      color: var(--accent);
-      font: 700 11px/1 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-    }
-
-    h1, h2, h3, h4, p, pre { margin: 0; }
-
-    h1 { margin-top: 10px; font-size: 30px; line-height: 1; }
-    h2 { margin-top: 8px; font-size: 28px; }
-    h3 { font-size: 20px; margin-bottom: 10px; }
-
-    .subtle {
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.55;
-    }
-
-    .session-list {
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      overflow: auto;
-    }
-
-    .create-form {
-      padding: 14px;
-      border-bottom: 1px solid rgba(221, 209, 191, 0.7);
-      display: grid;
-      gap: 10px;
-    }
-
-    .field {
-      display: grid;
-      gap: 6px;
-    }
-
-    .field label {
-      color: var(--muted);
-      font: 700 11px/1 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-    }
-
-    .field input,
-    .field textarea {
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: rgba(255,255,255,0.74);
-      padding: 12px 14px;
-      font: 15px/1.3 var(--serif);
-      color: var(--ink);
-    }
-
-    .field textarea {
-      min-height: 120px;
-      resize: vertical;
-    }
-
-    .session-card {
-      width: 100%;
-      text-align: left;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(244, 237, 227, 0.92));
-      border-radius: 18px;
-      padding: 14px;
-      cursor: pointer;
-      transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
-      color: inherit;
-    }
-
-    .session-card:hover, .session-card.active {
-      transform: translateY(-2px);
-      border-color: var(--accent);
-      box-shadow: 0 12px 28px rgba(188, 79, 43, 0.14);
-    }
-
-    .session-card h3 {
-      font-size: 18px;
-      margin-bottom: 8px;
-    }
-
-    .session-meta, .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 999px;
-      padding: 5px 9px;
-      background: rgba(188, 79, 43, 0.09);
-      color: var(--accent);
-      font: 600 11px/1.4 var(--mono);
-    }
-
-    .content { display: flex; flex-direction: column; }
-
-    .hero {
-      padding: 24px;
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-      border-bottom: 1px solid rgba(221, 209, 191, 0.7);
-    }
-
-    .metric, .block {
-      background: var(--surface);
-      border: 1px solid rgba(221, 209, 191, 0.7);
-      border-radius: 22px;
-    }
-
-    .metric {
-      padding: 16px;
-    }
-
-    .metric .label {
-      color: var(--muted);
-      font: 600 11px/1.3 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-    }
-
-    .metric .value {
-      margin-top: 10px;
-      font-size: 28px;
-      font-weight: 700;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1.25fr 0.75fr;
-      gap: 16px;
-      padding: 18px;
-    }
-
-    .stack { display: grid; gap: 16px; }
-    .block { padding: 18px; }
-
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 14px;
-    }
-
-    .turn-form {
-      margin-top: 14px;
-      display: grid;
-      gap: 10px;
-    }
-
-    .turn-form textarea {
-      width: 100%;
-      min-height: 120px;
-      resize: vertical;
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: rgba(255,255,255,0.72);
-      padding: 14px;
-      font: 14px/1.6 var(--mono);
-      color: var(--ink);
-    }
-
-    button.action {
-      border: 0;
-      border-radius: 999px;
-      padding: 10px 14px;
-      background: var(--accent);
-      color: white;
-      font: 700 12px/1 var(--mono);
-      cursor: pointer;
-    }
-
-    button.action.secondary {
-      background: rgba(23, 32, 51, 0.82);
-    }
-
-    button.action.ghost {
-      background: rgba(188, 79, 43, 0.1);
-      color: var(--accent);
-      border: 1px solid rgba(188, 79, 43, 0.18);
-    }
-
-    .status {
-      margin-top: 12px;
-      padding: 11px 12px;
-      border-radius: 14px;
-      background: rgba(188, 79, 43, 0.08);
-      color: var(--accent);
-      font: 600 12px/1.5 var(--mono);
-      min-height: 42px;
-    }
-
-    .timeline { display: grid; gap: 10px; }
-    .timeline-item {
-      padding-left: 14px;
-      border-left: 2px solid var(--accent-soft);
-    }
-
-    .timeline-item time {
-      display: block;
-      color: var(--muted);
-      font: 600 11px/1.4 var(--mono);
-      margin-bottom: 4px;
-    }
-
-    .codebox {
-      margin-top: 12px;
-      padding: 14px;
-      border-radius: 16px;
-      background: #1c2430;
-      color: #f2efe8;
-      font: 13px/1.6 var(--mono);
-      white-space: pre-wrap;
-      overflow: auto;
-    }
-
-    .checkpoint-list {
-      display: grid;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .checkpoint-item {
-      padding: 12px;
-      border-radius: 16px;
-      border: 1px solid rgba(221, 209, 191, 0.7);
-      background: rgba(255,255,255,0.45);
-    }
-
-    .checkpoint-item header {
-      padding: 0;
-      border: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    .empty {
-      padding: 28px;
-      color: var(--muted);
-      text-align: center;
-      font-size: 15px;
-    }
-
-    @media (max-width: 1040px) {
-      .shell { grid-template-columns: 1fr; }
-      .sidebar, .content { min-height: auto; }
-      .hero { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .grid { grid-template-columns: 1fr; }
-    }
-
-    @media (max-width: 640px) {
-      .hero { grid-template-columns: 1fr; }
-      .shell { width: min(100vw - 16px, 1440px); margin: 8px auto; }
-    }
-  </style>
+  <link rel="stylesheet" href="/static/dashboard.css" />
 </head>
 <body>
-  <div class="shell">
-    <aside class="panel sidebar">
-      <header>
+  <div id="app-shell" class="app-shell" data-dashboard-version="2">
+    <aside class="sidebar">
+      <div class="brand-card panel">
         <p class="eyebrow">Learn New</p>
-        <h1>Session Index</h1>
-        <p class="subtle">Reads <code>/api/sessions</code> and turns the existing APIs into a lightweight control room.</p>
-      </header>
-      <div class="create-form">
-        <div class="field">
-          <label for="admin-key-input">Admin Key</label>
+        <h1>Learning Operations Center</h1>
+        <p class="lede">A browser control room for sessions, async turns, runtime posture, and knowledge ingestion.</p>
+      </div>
+
+      <section class="panel section-card">
+        <div class="section-heading">
+          <p class="eyebrow">Access</p>
+          <h2>Admin Header</h2>
+        </div>
+        <label class="field">
+          <span>X-Admin-Key</span>
           <input id="admin-key-input" name="admin-key" placeholder="Optional X-Admin-Key" />
+        </label>
+        <p class="microcopy">Requests automatically include the configured admin header when present.</p>
+      </section>
+
+      <section class="panel section-card">
+        <div class="section-heading">
+          <p class="eyebrow">Create</p>
+          <h2>Session Workspace</h2>
         </div>
-      </div>
-      <form id="create-session-form" class="create-form">
-        <div class="field">
-          <label for="domain-input">Domain</label>
-          <input id="domain-input" name="domain" placeholder="Python async programming" />
+        <form id="create-session-form" class="stack-form">
+          <label class="field">
+            <span>Domain</span>
+            <input id="domain-input" name="domain" placeholder="Python async programming" />
+          </label>
+          <label class="field">
+            <span>Goal</span>
+            <input id="goal-input" name="goal" placeholder="Master async/await" />
+          </label>
+          <label class="field">
+            <span>Background</span>
+            <textarea id="background-input" name="background" placeholder="Current experience, blockers, and context."></textarea>
+          </label>
+          <label class="field">
+            <span>Hours / Week</span>
+            <input id="time-budget-input" name="available_time_hours_per_week" type="number" min="1" value="5" />
+          </label>
+          <label class="field">
+            <span>Preferences</span>
+            <input id="preferences-input" name="preferences" placeholder="project, examples, coaching" value="project, examples" />
+          </label>
+          <button class="action primary" type="submit">Create Session</button>
+        </form>
+      </section>
+
+      <section class="panel section-card">
+        <div class="section-heading">
+          <p class="eyebrow">Index</p>
+          <h2>Active Sessions</h2>
         </div>
-        <div class="field">
-          <label for="goal-input">Goal</label>
-          <input id="goal-input" name="goal" placeholder="Master async/await" />
+        <div id="session-list" class="session-list">
+          <div class="empty">Loading sessions...</div>
         </div>
-        <button class="action" type="submit">Create Session</button>
-      </form>
-      <div id="session-list" class="session-list">
-        <div class="empty">Loading sessions...</div>
-      </div>
+      </section>
     </aside>
 
-    <main class="panel content">
-      <header>
-        <p class="eyebrow">Dashboard</p>
-        <h2 id="title">No Session Selected</h2>
-        <p id="subtitle" class="subtle">Select a session to load summary, timeline, lesson, practice, review controls, and checkpoints.</p>
-        <div class="toolbar">
-          <button id="start-review" class="action">Start Review</button>
-          <button id="refresh-data" class="action secondary">Refresh</button>
-          <button id="load-export-preview" class="action secondary">Load Export Preview</button>
-          <button id="export-session" class="action ghost">Open Export JSON</button>
+    <main class="main-column">
+      <section class="hero panel">
+        <div>
+          <p class="eyebrow">Mission Control</p>
+          <h2 id="title">No Session Selected</h2>
+          <p id="subtitle" class="lede">Select a session to inspect the learning loop, queue work, import knowledge, and observe runtime health.</p>
         </div>
-        <form id="turn-form" class="turn-form">
-          <label class="eyebrow" for="answer-input">Learner Answer</label>
-          <textarea id="answer-input" name="answer" placeholder="Submit Turn: paste a learner answer or code snippet here."></textarea>
-          <div class="actions">
-            <button class="action" type="submit">Submit Turn</button>
-          </div>
-        </form>
-        <div id="action-status" class="status">Ready.</div>
-      </header>
+        <div class="hero-actions">
+          <button id="refresh-data" class="action secondary" type="button">Refresh Session</button>
+          <button id="load-export-preview" class="action secondary" type="button">Load Export Preview</button>
+          <button id="export-session" class="action ghost" type="button">Open Export JSON</button>
+        </div>
+        <div id="action-status" class="status-banner">Ready.</div>
+        <div id="hero" class="hero-metrics"></div>
+      </section>
 
-      <section id="hero" class="hero"></section>
-
-      <section class="grid">
-        <div class="stack">
-          <article class="block">
-            <h3>Lesson</h3>
-            <p id="lesson-text" class="subtle">No lesson yet.</p>
-            <div id="lesson-quiz" class="codebox" hidden></div>
+      <section class="main-grid">
+        <div class="column">
+          <article class="panel section-card">
+            <div class="section-heading">
+              <p class="eyebrow">Turn Loop</p>
+              <h2>Run Sync Turn</h2>
+            </div>
+            <form id="turn-form" class="stack-form">
+              <label class="field">
+                <span>Learner Answer</span>
+                <textarea id="answer-input" name="answer" placeholder="Submit Turn: explain the learner's latest answer, code, or reflection."></textarea>
+              </label>
+              <div class="action-row">
+                <button class="action primary" type="submit">Run Sync Turn</button>
+                <button id="start-review" class="action ghost" type="button">Start Review</button>
+              </div>
+            </form>
           </article>
 
-          <article class="block">
-            <h3>Practice</h3>
-            <p id="practice-text" class="subtle">No practice yet.</p>
-            <div id="practice-rubric" class="codebox" hidden></div>
+          <article class="panel section-card" id="async-task-console">
+            <div class="section-heading">
+              <p class="eyebrow">Queue</p>
+              <h2>Async Task Console</h2>
+            </div>
+            <form id="task-form" class="stack-form">
+              <label class="field">
+                <span>Queued Learner Answer</span>
+                <textarea id="task-answer-input" name="task-answer" placeholder="Queue a turn and stream execution over WebSocket."></textarea>
+              </label>
+              <div class="action-row">
+                <button class="action primary" type="submit">Queue Turn Task</button>
+                <button id="poll-task-status" class="action secondary" type="button">Poll Task Status</button>
+              </div>
+            </form>
+            <div id="task-stream-status" class="status-banner muted">No queued task yet.</div>
+            <div id="task-stream" class="task-stream">
+              <div class="empty">Queued task events will appear here.</div>
+            </div>
           </article>
 
-          <article class="block">
-            <h3>Knowledge Intake</h3>
-            <p class="subtle">Upload notes, excerpts, or snippets that should influence the next teaching turn.</p>
-            <form id="knowledge-form" class="turn-form">
-              <div class="field">
-                <label for="knowledge-title-input">Title</label>
+          <article class="panel section-card" id="knowledge-pipeline">
+            <div class="section-heading">
+              <p class="eyebrow">Knowledge</p>
+              <h2>Knowledge Pipeline</h2>
+            </div>
+            <form id="knowledge-url-form" class="stack-form">
+              <label class="field">
+                <span>Knowledge URL</span>
+                <input id="knowledge-url-input" name="knowledge-url" placeholder="https://example.com/reference" />
+              </label>
+              <button class="action secondary" type="submit">Import URL</button>
+            </form>
+            <form id="knowledge-form" class="stack-form">
+              <label class="field">
+                <span>Title</span>
                 <input id="knowledge-title-input" name="title" placeholder="Async Notes" />
-              </div>
-              <div class="field">
-                <label for="knowledge-source-input">Source</label>
+              </label>
+              <label class="field">
+                <span>Source</span>
                 <input id="knowledge-source-input" name="source" placeholder="user://dashboard" value="user://dashboard" />
-              </div>
-              <div class="field">
-                <label for="knowledge-content-input">Content</label>
-                <textarea id="knowledge-content-input" name="content" placeholder="Paste notes, references, or constraints for the current learning session."></textarea>
-              </div>
-              <div class="actions">
-                <button class="action" type="submit">Upload Knowledge</button>
-              </div>
+              </label>
+              <label class="field">
+                <span>Content</span>
+                <textarea id="knowledge-content-input" name="content" placeholder="Paste notes, constraints, or excerpts that should bias the next teaching turn."></textarea>
+              </label>
+              <button class="action primary" type="submit">Upload Knowledge</button>
             </form>
-          </article>
-
-          <article class="block">
-            <h3>Search Knowledge</h3>
-            <p class="subtle">Query the indexed knowledge chunks already attached to the active session.</p>
-            <form id="knowledge-search-form" class="turn-form">
-              <div class="field">
-                <label for="knowledge-query-input">Query</label>
+            <form id="knowledge-search-form" class="stack-form">
+              <label class="field">
+                <span>Query</span>
                 <input id="knowledge-query-input" name="query" placeholder="event loop scheduling" />
-              </div>
-              <div class="actions">
-                <button class="action secondary" type="submit">Search Knowledge</button>
-              </div>
+              </label>
+              <button class="action ghost" type="submit">Search Knowledge</button>
             </form>
-            <div id="knowledge-results" class="checkpoint-list">
+            <div id="knowledge-results" class="result-stack">
               <div class="empty">Search knowledge to inspect retrieved chunks.</div>
             </div>
           </article>
 
-          <article class="block">
-            <h3>Checkpoints</h3>
-            <p class="subtle">Restore any previously recorded state snapshot.</p>
-            <div id="checkpoint-list" class="checkpoint-list">
-              <div class="empty">No checkpoints loaded.</div>
+          <article class="panel section-card">
+            <div class="section-heading">
+              <p class="eyebrow">Workspace</p>
+              <h2>Session Workspace</h2>
+            </div>
+            <div id="session-files-panel" class="workspace-tree">
+              <div class="empty">Select a session to inspect its derived workspace files.</div>
             </div>
           </article>
         </div>
 
-        <div class="stack">
-          <article class="block">
-            <h3>Timeline</h3>
+        <div class="column">
+          <article class="panel section-card" id="runtime-pulse">
+            <div class="section-heading">
+              <p class="eyebrow">Ops</p>
+              <h2>Runtime Pulse</h2>
+            </div>
+            <div class="action-row">
+              <button id="refresh-runtime" class="action secondary" type="button">Refresh Runtime</button>
+              <button id="load-config" class="action ghost" type="button">Load Config</button>
+            </div>
+            <div class="runtime-grid">
+              <div id="runtime-summary-panel" class="info-panel">
+                <div class="empty">Runtime summary has not been loaded.</div>
+              </div>
+              <div id="config-summary-panel" class="info-panel">
+                <div class="empty">Provider Routing configuration has not been loaded.</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel section-card">
+            <div class="section-heading">
+              <p class="eyebrow">Lesson</p>
+              <h2>Teaching Output</h2>
+            </div>
+            <p id="lesson-text" class="copy-block">No lesson yet.</p>
+            <pre id="lesson-quiz" class="codebox" hidden></pre>
+            <p id="practice-text" class="copy-block">No practice yet.</p>
+            <pre id="practice-rubric" class="codebox" hidden></pre>
+            <div id="latest-feedback" class="copy-block emphasis">No feedback yet.</div>
+          </article>
+
+          <article class="panel section-card">
+            <div class="section-heading">
+              <p class="eyebrow">Timeline</p>
+              <h2>Session Activity</h2>
+            </div>
             <div id="timeline" class="timeline">
               <div class="empty">No timeline yet.</div>
             </div>
           </article>
 
-          <article class="block">
-            <h3>Mastery Snapshot</h3>
-            <div id="mastery" class="subtle">No mastery data yet.</div>
-          </article>
-
-          <article class="block">
-            <h3>Latest Feedback</h3>
-            <div id="latest-feedback" class="subtle">No feedback yet.</div>
-          </article>
-
-          <article class="block">
-            <h3>Due Review Queue</h3>
-            <p class="subtle">Concepts that are currently due based on the spaced-review schedule.</p>
-            <div id="due-review-list" class="checkpoint-list">
+          <article class="panel section-card">
+            <div class="section-heading">
+              <p class="eyebrow">Mastery</p>
+              <h2>Progress Snapshot</h2>
+            </div>
+            <div id="mastery" class="info-panel">
+              <div class="empty">No mastery data yet.</div>
+            </div>
+            <div id="due-review-list" class="result-stack">
               <div class="empty">No due reviews loaded.</div>
+            </div>
+            <div id="checkpoint-list" class="result-stack">
+              <div class="empty">No checkpoints loaded.</div>
             </div>
           </article>
 
-          <article class="block">
-            <h3>Session Export Preview</h3>
-            <p class="subtle">Load the current session bundle inline before opening the raw JSON in a new tab.</p>
-            <div id="export-preview" class="codebox">Load export preview to inspect the current session bundle.</div>
+          <article class="panel section-card">
+            <div class="section-heading">
+              <p class="eyebrow">Export</p>
+              <h2>Session Export Preview</h2>
+            </div>
+            <pre id="export-preview" class="codebox">Load export preview to inspect the current session bundle.</pre>
+          </article>
+
+          <article class="panel section-card">
+            <div class="section-heading">
+              <p class="eyebrow">Provider Routing</p>
+              <h2>Config Surface</h2>
+            </div>
+            <p class="microcopy">Load Config reads <code>/api/config</code> and summarizes active model routing for this deployment.</p>
           </article>
         </div>
       </section>
     </main>
   </div>
 
-  <script>
-    const state = {
-      sessions: [],
-      activeSessionId: null,
-      activeSession: null,
-      activeSummary: null,
-      activeTimeline: null,
-      activeCheckpoints: [],
-      activeDueReviews: [],
-      activeKnowledgeResults: [],
-      activeExportPreview: null,
-    };
-
-    const sessionList = document.getElementById('session-list');
-    const createSessionForm = document.getElementById('create-session-form');
-    const adminKeyInput = document.getElementById('admin-key-input');
-    const domainInput = document.getElementById('domain-input');
-    const goalInput = document.getElementById('goal-input');
-    const hero = document.getElementById('hero');
-    const title = document.getElementById('title');
-    const subtitle = document.getElementById('subtitle');
-    const turnForm = document.getElementById('turn-form');
-    const answerInput = document.getElementById('answer-input');
-    const knowledgeForm = document.getElementById('knowledge-form');
-    const knowledgeTitleInput = document.getElementById('knowledge-title-input');
-    const knowledgeSourceInput = document.getElementById('knowledge-source-input');
-    const knowledgeContentInput = document.getElementById('knowledge-content-input');
-    const knowledgeSearchForm = document.getElementById('knowledge-search-form');
-    const knowledgeQueryInput = document.getElementById('knowledge-query-input');
-    const lessonText = document.getElementById('lesson-text');
-    const lessonQuiz = document.getElementById('lesson-quiz');
-    const practiceText = document.getElementById('practice-text');
-    const practiceRubric = document.getElementById('practice-rubric');
-    const timeline = document.getElementById('timeline');
-    const mastery = document.getElementById('mastery');
-    const checkpointList = document.getElementById('checkpoint-list');
-    const dueReviewList = document.getElementById('due-review-list');
-    const knowledgeResults = document.getElementById('knowledge-results');
-    const latestFeedback = document.getElementById('latest-feedback');
-    const loadExportPreviewButton = document.getElementById('load-export-preview');
-    const exportPreview = document.getElementById('export-preview');
-    const actionStatus = document.getElementById('action-status');
-    const startReviewButton = document.getElementById('start-review');
-    const refreshButton = document.getElementById('refresh-data');
-    const exportButton = document.getElementById('export-session');
-    const adminHeaderName = 'X-Admin-Key';
-
-    const storedAdminKey = window.localStorage.getItem('learn-new.admin-key') || '';
-    adminKeyInput.value = storedAdminKey;
-    adminKeyInput.addEventListener('change', () => {
-      window.localStorage.setItem('learn-new.admin-key', adminKeyInput.value.trim());
-      setStatus('Updated admin key for API requests.');
-    });
-
-    async function fetchJson(path, options) {
-      const requestOptions = { ...(options || {}) };
-      const headers = new Headers(requestOptions.headers || {});
-      const adminKey = adminKeyInput.value.trim();
-      if (adminKey) {
-        headers.set(adminHeaderName, adminKey);
-      }
-      requestOptions.headers = headers;
-      const response = await fetch(path, requestOptions);
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`${path} -> ${response.status} ${text}`);
-      }
-      return response.json();
-    }
-
-    async function fetchText(path, options) {
-      const requestOptions = { ...(options || {}) };
-      const headers = new Headers(requestOptions.headers || {});
-      const adminKey = adminKeyInput.value.trim();
-      if (adminKey) {
-        headers.set(adminHeaderName, adminKey);
-      }
-      requestOptions.headers = headers;
-      const response = await fetch(path, requestOptions);
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`${path} -> ${response.status} ${text}`);
-      }
-      return response.text();
-    }
-
-    function setStatus(message) {
-      actionStatus.textContent = message;
-    }
-
-    function renderMetric(label, value) {
-      return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`;
-    }
-
-    function renderSessionList() {
-      if (!state.sessions.length) {
-        sessionList.innerHTML = '<div class="empty">No sessions found yet. Create one with <code>POST /api/sessions</code>.</div>';
-        return;
-      }
-
-      sessionList.innerHTML = state.sessions.map((item) => `
-        <button class="session-card ${item.session_id === state.activeSessionId ? 'active' : ''}" data-session-id="${item.session_id}">
-          <h3>${item.domain}</h3>
-          <div class="session-meta">
-            <span class="badge">Stage ${item.current_stage}</span>
-            <span class="badge">${item.teaching_mode}</span>
-            <span class="badge">Score ${item.assessment_score}</span>
-          </div>
-        </button>
-      `).join('');
-
-      for (const button of sessionList.querySelectorAll('[data-session-id]')) {
-        button.addEventListener('click', () => loadSession(button.dataset.sessionId));
-      }
-    }
-
-    function renderSessionDetails() {
-      const session = state.activeSession;
-      const summary = state.activeSummary;
-      const timelineData = state.activeTimeline;
-
-      if (!session || !summary) {
-        title.textContent = 'No Session Selected';
-        subtitle.textContent = 'Select a session to load summary, timeline, lesson, practice, review controls, and checkpoints.';
-        hero.innerHTML = '';
-        lessonText.textContent = 'No lesson yet.';
-        lessonQuiz.hidden = true;
-        practiceText.textContent = 'No practice yet.';
-        practiceRubric.hidden = true;
-        timeline.innerHTML = '<div class="empty">No timeline yet.</div>';
-        mastery.textContent = 'No mastery data yet.';
-        checkpointList.innerHTML = '<div class="empty">No checkpoints loaded.</div>';
-        dueReviewList.innerHTML = '<div class="empty">No due reviews loaded.</div>';
-        knowledgeResults.innerHTML = '<div class="empty">Search knowledge to inspect retrieved chunks.</div>';
-        latestFeedback.textContent = 'No feedback yet.';
-        exportPreview.textContent = 'Load export preview to inspect the current session bundle.';
-        return;
-      }
-
-      title.textContent = session.domain;
-      subtitle.textContent = `Session ${session.session_id} | mode=${session.teaching_mode} | skills=${session.active_skills.length}`;
-      hero.innerHTML = [
-        renderMetric('Stage', summary.current_stage),
-        renderMetric('Mode', summary.teaching_mode),
-        renderMetric('Due Reviews', summary.due_review_count),
-        renderMetric('Tracked Concepts', summary.mastery_overview.tracked_concepts),
-      ].join('');
-
-      lessonText.textContent = session.lesson?.explanation ?? 'No lesson yet.';
-      if (session.lesson?.micro_quiz) {
-        lessonQuiz.hidden = false;
-        lessonQuiz.textContent = JSON.stringify(session.lesson.micro_quiz, null, 2);
-      } else {
-        lessonQuiz.hidden = true;
-        lessonQuiz.textContent = '';
-      }
-
-      practiceText.textContent = session.practice?.prompt ?? 'No practice yet.';
-      if (session.practice?.rubric) {
-        practiceRubric.hidden = false;
-        practiceRubric.textContent = JSON.stringify(session.practice.rubric, null, 2);
-      } else {
-        practiceRubric.hidden = true;
-        practiceRubric.textContent = '';
-      }
-
-      if (!timelineData?.items?.length) {
-        timeline.innerHTML = '<div class="empty">No timeline yet.</div>';
-      } else {
-        timeline.innerHTML = timelineData.items.map((item) => `
-          <div class="timeline-item">
-            <time>${item.timestamp}</time>
-            <strong>${item.kind}</strong>
-            <div>${item.message}</div>
-          </div>
-        `).join('');
-      }
-
-      mastery.innerHTML = `
-        <div>average_score: <strong>${summary.mastery_overview.average_score}</strong></div>
-        <div>due_review_count: <strong>${summary.mastery_overview.due_review_count}</strong></div>
-        <div>strongest: <strong>${summary.mastery_overview.strongest_concept ?? '-'}</strong></div>
-        <div>weakest: <strong>${summary.mastery_overview.weakest_concept ?? '-'}</strong></div>
-      `;
-
-      renderCheckpoints();
-      renderDueReviews();
-      renderKnowledgeResults();
-      renderLatestFeedback();
-      renderExportPreview();
-    }
-
-    function renderCheckpoints() {
-      if (!state.activeCheckpoints.length) {
-        checkpointList.innerHTML = '<div class="empty">No checkpoints loaded.</div>';
-        return;
-      }
-
-      checkpointList.innerHTML = state.activeCheckpoints.map((item) => `
-        <div class="checkpoint-item">
-          <header>
-            <strong>${item.checkpoint_id}</strong>
-            <button class="action ghost restore-button" data-checkpoint-id="${item.checkpoint_id}">Restore Checkpoint</button>
-          </header>
-          <div class="session-meta">
-            <span class="badge">Stage ${item.current_stage}</span>
-            <span class="badge">${item.teaching_mode}</span>
-            <span class="badge">Score ${item.assessment_score}</span>
-          </div>
-          <p class="subtle">${item.created_at}</p>
-        </div>
-      `).join('');
-
-      for (const button of checkpointList.querySelectorAll('.restore-button')) {
-        button.addEventListener('click', async () => {
-          await restoreCheckpoint(button.dataset.checkpointId);
-        });
-      }
-    }
-
-    function renderDueReviews() {
-      if (!state.activeDueReviews.length) {
-        dueReviewList.innerHTML = '<div class="empty">No due reviews right now.</div>';
-        return;
-      }
-
-      dueReviewList.innerHTML = state.activeDueReviews.map((item) => `
-        <div class="checkpoint-item">
-          <strong>${item}</strong>
-        </div>
-      `).join('');
-    }
-
-    function renderKnowledgeResults() {
-      if (!state.activeKnowledgeResults.length) {
-        knowledgeResults.innerHTML = '<div class="empty">Search knowledge to inspect retrieved chunks.</div>';
-        return;
-      }
-
-      knowledgeResults.innerHTML = state.activeKnowledgeResults.map((item) => `
-        <div class="checkpoint-item">
-          <header>
-            <strong>${item.title}</strong>
-            <span class="badge">score ${item.score}</span>
-          </header>
-          <p class="subtle">${item.text}</p>
-          <div class="session-meta">
-            <span class="badge">${item.source}</span>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function renderLatestFeedback() {
-      latestFeedback.textContent = state.activeSession?.latest_feedback ?? 'No feedback yet.';
-    }
-
-    function renderExportPreview() {
-      if (!state.activeExportPreview) {
-        exportPreview.textContent = 'Load export preview to inspect the current session bundle.';
-        return;
-      }
-      exportPreview.textContent = JSON.stringify(state.activeExportPreview, null, 2);
-    }
-
-    async function loadSessions() {
-      const payload = await fetchJson('/api/sessions');
-      state.sessions = payload.items;
-      if (!state.activeSessionId && state.sessions.length) {
-        state.activeSessionId = state.sessions[0].session_id;
-      }
-      renderSessionList();
-      if (state.activeSessionId) {
-        await loadSession(state.activeSessionId);
-      } else {
-        renderSessionDetails();
-      }
-    }
-
-    async function loadSession(sessionId) {
-      state.activeSessionId = sessionId;
-      renderSessionList();
-      setStatus(`Loading ${sessionId}...`);
-
-      const [session, summary, timelineData, checkpoints, dueReviews] = await Promise.all([
-        fetchJson(`/api/sessions/${sessionId}`),
-        fetchJson(`/api/sessions/${sessionId}/summary`),
-        fetchJson(`/api/sessions/${sessionId}/timeline?limit=12`),
-        fetchJson(`/api/sessions/${sessionId}/checkpoints`),
-        fetchJson(`/api/sessions/${sessionId}/reviews/due`),
-      ]);
-
-      state.activeSession = session;
-      state.activeSummary = summary;
-      state.activeTimeline = timelineData;
-      state.activeCheckpoints = checkpoints.items;
-      state.activeDueReviews = dueReviews.items;
-      state.activeKnowledgeResults = [];
-      state.activeExportPreview = null;
-      renderSessionDetails();
-      setStatus(`Loaded session ${sessionId}.`);
-    }
-
-    async function startReview() {
-      if (!state.activeSessionId) return;
-      setStatus('Starting review...');
-      await fetchJson(`/api/sessions/${state.activeSessionId}/reviews`, { method: 'POST' });
-      await loadSession(state.activeSessionId);
-      setStatus('Review round created.');
-    }
-
-    async function submitTurn() {
-      if (!state.activeSessionId) {
-        setStatus('Select or create a session first.');
-        return;
-      }
-      const learnerAnswer = answerInput.value.trim();
-      if (!learnerAnswer) {
-        setStatus('Submit Turn requires a learner answer.');
-        return;
-      }
-      setStatus('Submitting turn...');
-      await fetchJson(`/api/sessions/${state.activeSessionId}/turns`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ learner_answer: learnerAnswer }),
-      });
-      answerInput.value = '';
-      await loadSession(state.activeSessionId);
-      setStatus('Turn submitted.');
-    }
-
-    async function restoreCheckpoint(checkpointId) {
-      if (!state.activeSessionId) return;
-      setStatus(`Restoring ${checkpointId}...`);
-      await fetchJson(`/api/sessions/${state.activeSessionId}/checkpoints/${checkpointId}/restore`, { method: 'POST' });
-      await loadSession(state.activeSessionId);
-      setStatus(`Restored checkpoint ${checkpointId}.`);
-    }
-
-    async function uploadKnowledge() {
-      if (!state.activeSessionId) {
-        setStatus('Select or create a session first.');
-        return;
-      }
-      const title = knowledgeTitleInput.value.trim();
-      const content = knowledgeContentInput.value.trim();
-      const source = knowledgeSourceInput.value.trim() || 'user://dashboard';
-      if (!title || !content) {
-        setStatus('Upload Knowledge requires both title and content.');
-        return;
-      }
-      setStatus('Uploading knowledge...');
-      await fetchJson(`/api/sessions/${state.activeSessionId}/knowledge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content, source }),
-      });
-      knowledgeTitleInput.value = '';
-      knowledgeContentInput.value = '';
-      knowledgeSourceInput.value = source;
-      await loadSession(state.activeSessionId);
-      setStatus('Knowledge uploaded.');
-    }
-
-    async function searchKnowledge() {
-      if (!state.activeSessionId) {
-        setStatus('Select or create a session first.');
-        return;
-      }
-      const query = knowledgeQueryInput.value.trim();
-      if (!query) {
-        setStatus('Search Knowledge requires a query.');
-        return;
-      }
-      setStatus('Searching knowledge...');
-      const payload = await fetchJson(`/api/sessions/${state.activeSessionId}/knowledge/search?query=${encodeURIComponent(query)}`);
-      state.activeKnowledgeResults = payload.items;
-      renderKnowledgeResults();
-      setStatus(`Knowledge search returned ${payload.items.length} result(s).`);
-    }
-
-    async function loadExportPreview() {
-      if (!state.activeSessionId) {
-        setStatus('Select or create a session first.');
-        return;
-      }
-      setStatus('Loading export preview...');
-      state.activeExportPreview = await fetchJson(`/api/sessions/${state.activeSessionId}/export`);
-      renderExportPreview();
-      setStatus('Export preview loaded.');
-    }
-
-    async function openExport() {
-      if (!state.activeSessionId) return;
-      setStatus('Opening export JSON...');
-      const payload = await fetchText(`/api/sessions/${state.activeSessionId}/export`);
-      const blob = new Blob([payload], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      setStatus('Opened export JSON.');
-    }
-
-    startReviewButton.addEventListener('click', () => {
-      startReview().catch((error) => setStatus(`Start Review failed: ${error.message}`));
-    });
-
-    createSessionForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const domain = domainInput.value.trim();
-      const goal = goalInput.value.trim();
-      if (!domain || !goal) {
-        setStatus('Create Session requires both domain and goal.');
-        return;
-      }
-      setStatus('Creating session...');
-      try {
-        const created = await fetchJson('/api/sessions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domain, goal }),
-        });
-        domainInput.value = '';
-        goalInput.value = '';
-        await loadSessions();
-        await loadSession(created.session_id);
-        setStatus(`Created session ${created.session_id}.`);
-      } catch (error) {
-        setStatus(`Create Session failed: ${error.message}`);
-      }
-    });
-
-    turnForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      submitTurn().catch((error) => setStatus(`Submit Turn failed: ${error.message}`));
-    });
-
-    knowledgeForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      uploadKnowledge().catch((error) => setStatus(`Upload Knowledge failed: ${error.message}`));
-    });
-
-    knowledgeSearchForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      searchKnowledge().catch((error) => setStatus(`Search Knowledge failed: ${error.message}`));
-    });
-
-    refreshButton.addEventListener('click', () => {
-      if (!state.activeSessionId) {
-        loadSessions().catch((error) => setStatus(`Refresh failed: ${error.message}`));
-        return;
-      }
-      loadSession(state.activeSessionId).catch((error) => setStatus(`Refresh failed: ${error.message}`));
-    });
-
-    exportButton.addEventListener('click', () => {
-      openExport().catch((error) => setStatus(`Open Export JSON failed: ${error.message}`));
-    });
-    loadExportPreviewButton.addEventListener('click', () => {
-      loadExportPreview().catch((error) => setStatus(`Load Export Preview failed: ${error.message}`));
-    });
-
-    loadSessions().catch((error) => {
-      sessionList.innerHTML = `<div class="empty">Dashboard load failed: ${error.message}</div>`;
-      setStatus(`Load failed: ${error.message}`);
-    });
-  </script>
+  <script src="/static/dashboard.js" defer></script>
 </body>
 </html>
 """

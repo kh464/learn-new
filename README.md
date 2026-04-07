@@ -112,15 +112,24 @@ http://127.0.0.1:8000/dashboard
 仪表盘当前可直接完成这些操作：
 
 - 创建学习 session
+- 填写 background、每周时间预算和学习偏好创建更完整的 learner profile
 - 上传本地知识片段到当前 session
+- 直接导入外部 URL 到当前 session 知识索引
 - 检索当前 session 已索引的知识片段
 - 提交 learner answer 推进一轮教学
+- 将 learner answer 以后台任务方式入队，并在页面内流式查看任务状态
 - 启动显式 review 回合
 - 查看当前到期复习队列
 - 查看当前 session 的 latest feedback
 - 在 dashboard 内预览 session export 快照
 - 恢复历史 checkpoint
 - 导出当前 session JSON
+- 查看 `/api/runtime/summary`、`/api/audit`、`/api/logs/app` 聚合后的运行态摘要
+- 查看 `/api/config` 暴露的 provider routing 与默认模型配置
+
+更多前端面板和操作说明见：
+
+- [docs/frontend-dashboard.md](docs/frontend-dashboard.md)
 
 服务启动后可访问：
 
@@ -153,10 +162,10 @@ http://127.0.0.1:8000/dashboard
 `GET /health/ready` 现在会主动探测当前配置的 SQLite/PostgreSQL、Redis、Qdrant、Docker 等后端。
 当必需后端不可达时会返回 `503`，并在响应体的 `checks` 字段里给出逐项诊断。
 
-`GET /api/config` 会返回当前默认 provider、默认 profile，以及 `llm_available`，用于判断当前是否会走真实模型。
+`GET /api/config` 会返回当前默认 provider、默认 profile、provider 列表、routing profile，以及 `llm_available`，用于判断当前是否会走真实模型。
 `GET /api/logs/app` 可供 admin 拉取最近结构化应用日志。
 `POST /api/tasks/turns` 可把一轮教学推进提交到后台 worker；随后用 `GET /api/tasks/{task_id}` 轮询状态和结果。
-`WS /ws/tasks/{task_id}` 可流式接收后台任务的状态变化。
+`WS /ws/tasks/{task_id}` 可流式接收后台任务的状态变化；dashboard 为了兼容浏览器环境，支持通过 query string 传递 `api_key` 连接该 WebSocket。
 `POST /api/sessions/{session_id}/knowledge/import-url` 可抓取外部 URL 文本并直接入库到当前 session 知识索引。
 URL 导入目前只接受 `http/https`，并按 `source + content` 指纹做幂等去重，重复导入不会重复写入 chunk。
 
